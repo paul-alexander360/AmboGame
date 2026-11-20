@@ -5,13 +5,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,28 +42,45 @@ fun HomeScreen(version: String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFA9ADE3))
+            .background(Color(0xFF9BD468))
             .safeDrawingPadding()
-            .padding(12.dp),
+            .padding(8.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFFFF6A3D), RoundedCornerShape(24.dp))
-                .padding(vertical = 14.dp, horizontal = 20.dp)
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Ambulance Run", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Call: 214 Elm St", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFFFF3E0), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text("Par 2:10", color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(20.dp))
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+        CityMap(Modifier.fillMaxWidth().aspectRatio(358f / 280f))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("The city map is coming in the next update.", fontSize = 16.sp)
+            Box(
+                modifier = Modifier
+                    .width(220.dp)
+                    .background(Color(0xFF4DC43B), RoundedCornerShape(24.dp))
+                    .border(3.dp, Color(0xFFF6A12B), RoundedCornerShape(24.dp))
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Go!", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Version $version", color = Color.White, fontSize = 12.sp)
         }
-        Text("Version $version", color = Color.White, fontSize = 13.sp)
     }
 }
