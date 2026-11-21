@@ -68,7 +68,7 @@ fun HomeScreen(version: String) {
                 Text("Par " + City.fmt(par), color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
-        CityMap(rs.path, rs.done, { rs.move(it) }, Modifier.fillMaxWidth().aspectRatio(358f / 280f))
+        CityMap(rs.path, rs.done, rs.started, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxWidth().aspectRatio(358f / 280f))
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -81,7 +81,7 @@ fun HomeScreen(version: String) {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Drag from the station to the glowing building.", fontSize = 15.sp)
+                    Text("Drag from the station to the glowing building. Pinch to zoom, drag elsewhere to move the map.", fontSize = 15.sp)
                 }
             } else {
                 val user = City.pathTime(rs.path.toList())
