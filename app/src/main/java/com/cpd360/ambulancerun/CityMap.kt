@@ -51,6 +51,7 @@ fun CityMap(
     path: List<Int>,
     done: Boolean,
     started: Boolean,
+    stage: Int,
     onBegin: () -> Unit,
     onNode: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -64,6 +65,7 @@ fun CityMap(
     val cb by rememberUpdatedState(onNode)
     val begin by rememberUpdatedState(onBegin)
     val st by rememberUpdatedState(started)
+    val stg by rememberUpdatedState(stage)
     val dn by rememberUpdatedState(done)
     val pth by rememberUpdatedState(path)
     var zm by remember { mutableFloatStateOf(1f) }
@@ -78,8 +80,9 @@ fun CityMap(
                     val s0 = w / 358f
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val m0 = (down.position - mapOrigin(w, h, s0, zm, pan)) / (s0 * zm)
-                    val endX = if (!st || pth.isEmpty()) 50f else City.xs[pth.last() % 5]
-                    val endY = if (!st || pth.isEmpty()) 260f else City.ys[pth.last() / 5]
+                    val sp = City.STARTPT[stg]
+                    val endX = if (!st || pth.isEmpty()) sp[0] else City.xs[pth.last() % 5]
+                    val endY = if (!st || pth.isEmpty()) sp[1] else City.ys[pth.last() / 5]
                     var tracing = !dn && kotlin.math.hypot(m0.x - endX, m0.y - endY) < 34f
                     if (tracing) begin()
                     do {
@@ -123,7 +126,7 @@ fun CityMap(
         val o = mapOrigin(size.width, size.height, s0, zm, pan)
         drawRect(Color(0xFF9BD468))
         translate(o.x, o.y) {
-            scale(s0 * zm, Offset.Zero) { drawCity(p, path, done, started) }
+            scale(s0 * zm, Offset.Zero) { drawCity(p, path, done, started, stage) }
         }
     }
 }
@@ -228,7 +231,7 @@ private fun DrawScope.light(x: Float, y: Float) {
     drawCircle(Color(0xFF69F0AE), 2f, Offset(x, y + 3.5f))
 }
 
-private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started: Boolean) {
+private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started: Boolean, stage: Int) {
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
     box(Color(0xFF9BD468), 0f, 0f, 358f, 280f)
     for (y in YS) box(Road, 0f, y - 8f, 358f, 16f)
@@ -270,7 +273,7 @@ private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started
                 'S' -> { box(dw, cx - 3f, cy + 9f, 6f, (by + 65f) - (cy + 9f)); box(ap, cx - 5f, by + 64f, 10f, 3f); drawCircle(door, 1.8f, Offset(cx, cy + 9f)) }
                 else -> { box(dw, cx + 9f, cy - 3f, (bx + 65f) - (cx + 9f), 6f); box(ap, bx + 64f, cy - 5f, 3f, 10f); drawCircle(door, 1.8f, Offset(cx + 9f, cy)) }
             }
-            val call = c == 2 && r == 0 && n == 2
+            val call = if (stage == 0) (c == 2 && r == 0 && n == 2) else (c == 3 && r == 1 && n == 2)
             val hosp = c == 3 && r == 1 && n == 2
             if (call) {
                 val blue = Color(0xFF3FA2FF)
@@ -312,9 +315,9 @@ private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started
     }
     if (started) {
         val route = Path()
-        route.moveTo(50f, 260f)
+        route.moveTo(City.STARTPT[stage][0], City.STARTPT[stage][1])
         for (n in path) route.lineTo(City.xs[n % 5], City.ys[n / 5])
-        if (done) route.lineTo(205f, 100f)
+        if (done) route.lineTo(City.ENDPT[stage][0], City.ENDPT[stage][1])
         val rs = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
         drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rs(9f))
         translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rs(6f)) }
@@ -327,7 +330,9 @@ private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started
             if (isL) light(XS[i] + o, YS[j] + q) else stopSign(XS[i] + o, YS[j] + q)
         }
     }
-    translate(74f, 264f) {
+    val ax = if (stage == 0) 74f else 205f
+    val ay = if (stage == 0) 264f else 104f
+    translate(ax, ay) {
         scale(0.7f, Offset.Zero) {
             drawOval(Color.Black, Offset(-17f, 5f), Size(34f, 8f), alpha = 0.2f)
             box(Color(0xFFB0BEC5), -16f, -8f, 32f, 18f, 7f)
@@ -340,9 +345,11 @@ private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started
             drawCircle(Color(0xFF37474F), 3f, Offset(10f, 8f))
         }
     }
-    drawCircle(Color.White, 13f, Offset(50f, 231f))
-    poly(Color.White, 1f, 40f, 239f, 60f, 239f, 50f, 252f)
-    drawCircle(Color(0xFF2979FF), 11f, Offset(50f, 231f))
-    poly(Color(0xFF2979FF), 1f, 42f, 238f, 58f, 238f, 50f, 249f)
-    drawCircle(Color.White, 4f, Offset(50f, 231f))
+    if (stage == 0) {
+        drawCircle(Color.White, 13f, Offset(50f, 231f))
+        poly(Color.White, 1f, 40f, 239f, 60f, 239f, 50f, 252f)
+        drawCircle(Color(0xFF2979FF), 11f, Offset(50f, 231f))
+        poly(Color(0xFF2979FF), 1f, 42f, 238f, 58f, 238f, 50f, 249f)
+        drawCircle(Color.White, 4f, Offset(50f, 231f))
+    }
 }
