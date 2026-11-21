@@ -43,12 +43,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(version: String) {
     val rs = remember { RouteState() }
-    val fast = remember { City.fastest() }
+    val fast = remember(rs.stage) { City.fastest(rs.stage) }
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
     if (screen == 1) {
         ExamScreen {
-            rs.reset()
+            rs.startHospital()
             screen = 0
         }
         return
@@ -58,7 +58,7 @@ fun HomeScreen(version: String) {
             .fillMaxSize()
             .background(Color(0xFF9BD468))
     ) {
-        CityMap(rs.path, rs.done, rs.started, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxSize())
+        CityMap(rs.path, rs.done, rs.started, rs.stage, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxSize())
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -70,7 +70,7 @@ fun HomeScreen(version: String) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Call: 214 Elm St", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(if (rs.stage == 0) "Call: 214 Elm St" else "To the hospital", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Box(
                 modifier = Modifier
                     .background(Color(0xFFFFF3E0), RoundedCornerShape(12.dp))
@@ -95,7 +95,7 @@ fun HomeScreen(version: String) {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Drag from the station to the glowing building. Pinch to zoom, drag elsewhere to move the map.", fontSize = 15.sp)
+                    Text(if (rs.stage == 0) "Drag from the station to the glowing building. Pinch to zoom, drag elsewhere to move the map." else "Drag from the ambulance to the glowing hospital. Pinch to zoom, drag elsewhere to move the map.", fontSize = 15.sp)
                 }
             } else {
                 val user = City.pathTime(rs.path.toList())
@@ -111,7 +111,10 @@ fun HomeScreen(version: String) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(if (failed) "Too slow! Call failed" else "Route complete", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text("Your time " + City.fmt(user) + "   Fastest " + City.fmt(fast), fontSize = 14.sp)
+                    if (rs.stage == 1) {
+                        Text("To the call: " + City.fmt(rs.leg1User) + "   Fastest " + City.fmt(rs.leg1Fast), fontSize = 14.sp)
+                    }
+                    Text((if (rs.stage == 1) "To the hospital: " else "Your time ") + City.fmt(user) + "   Fastest " + City.fmt(fast), fontSize = 14.sp)
                     Spacer(Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
@@ -120,7 +123,7 @@ fun HomeScreen(version: String) {
                     ) {
                         Text(names[rating] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
-                    if (!failed) {
+                    if (!failed && rs.stage == 0) {
                         Box(
                             modifier = Modifier
                                 .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
