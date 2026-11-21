@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +20,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,18 +45,27 @@ fun HomeScreen(version: String) {
     val rs = remember { RouteState() }
     val fast = remember { City.fastest() }
     val par = fast * 1.6
-    Column(
+    var screen by remember { mutableIntStateOf(0) }
+    if (screen == 1) {
+        ExamScreen {
+            rs.reset()
+            screen = 0
+        }
+        return
+    }
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF9BD468))
-            .safeDrawingPadding()
-            .padding(8.dp),
-        verticalArrangement = Arrangement.SpaceBetween
     ) {
+        CityMap(rs.path, rs.done, rs.started, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxSize())
         Row(
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .background(Color(0xFFFF6A3D), RoundedCornerShape(24.dp))
+                .safeDrawingPadding()
+                .padding(8.dp)
+                .background(Color(0xEBFF6A3D), RoundedCornerShape(24.dp))
                 .padding(horizontal = 18.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -68,16 +79,19 @@ fun HomeScreen(version: String) {
                 Text("Par " + City.fmt(par), color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
-        CityMap(rs.path, rs.done, rs.started, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxWidth().aspectRatio(358f / 280f))
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .safeDrawingPadding()
+                .padding(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (!rs.done) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White, RoundedCornerShape(20.dp))
+                        .background(Color(0xF2FFFFFF), RoundedCornerShape(20.dp))
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -92,7 +106,7 @@ fun HomeScreen(version: String) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White, RoundedCornerShape(20.dp))
+                        .background(Color(0xF2FFFFFF), RoundedCornerShape(20.dp))
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -106,6 +120,17 @@ fun HomeScreen(version: String) {
                     ) {
                         Text(names[rating] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
+                    if (!failed) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
+                                .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
+                                .clickable { screen = 1 }
+                                .padding(horizontal = 22.dp, vertical = 10.dp)
+                        ) {
+                            Text("Treat patient", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     Spacer(Modifier.height(10.dp))
                     Box(
                         modifier = Modifier
@@ -117,7 +142,7 @@ fun HomeScreen(version: String) {
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text("Version $version", color = Color.White, fontSize = 12.sp)
         }
     }
