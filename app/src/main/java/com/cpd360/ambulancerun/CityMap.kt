@@ -7,6 +7,17 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
@@ -36,7 +47,14 @@ private val XS = floatArrayOf(19f, 99f, 179f, 259f, 339f)
 private val YS = floatArrayOf(20f, 100f, 180f, 260f)
 
 @Composable
-fun CityMap(path: List<Int>, done: Boolean, onNode: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun CityMap(
+    path: List<Int>,
+    done: Boolean,
+    started: Boolean,
+    onBegin: () -> Unit,
+    onNode: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val t = rememberInfiniteTransition(label = "pulse")
     val p by t.animateFloat(
         0f, 1f,
@@ -44,31 +62,70 @@ fun CityMap(path: List<Int>, done: Boolean, onNode: (Int) -> Unit, modifier: Mod
         label = "p"
     )
     val cb by rememberUpdatedState(onNode)
+    val begin by rememberUpdatedState(onBegin)
+    val st by rememberUpdatedState(started)
+    val dn by rememberUpdatedState(done)
+    val pth by rememberUpdatedState(path)
+    var zm by remember { mutableFloatStateOf(1f) }
+    var off by remember { mutableStateOf(Offset.Zero) }
     Canvas(
-        modifier.pointerInput(Unit) {
-            detectDragGestures { change, _ ->
-                change.consume()
-                val s = size.width / 358f
-                val x = change.position.x / s
-                val y = change.position.y / s
-                var best = -1
-                var bd = 24f
-                for (j in 0..3) for (i in 0..4) {
-                    val dx = x - City.xs[i]
-                    val dy = y - City.ys[j]
-                    val d = kotlin.math.sqrt(dx * dx + dy * dy)
-                    if (d < bd) {
-                        bd = d
-                        best = j * 5 + i
-                    }
+        modifier
+            .clipToBounds()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val w = size.width.toFloat()
+                    val h = size.height.toFloat()
+                    val s0 = w / 358f
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val m0 = (down.position - off) / (s0 * zm)
+                    val endX = if (!st || pth.isEmpty()) 50f else City.xs[pth.last() % 5]
+                    val endY = if (!st || pth.isEmpty()) 260f else City.ys[pth.last() / 5]
+                    var tracing = !dn && kotlin.math.hypot(m0.x - endX, m0.y - endY) < 34f
+                    if (tracing) begin()
+                    do {
+                        val ev = awaitPointerEvent()
+                        val pressed = ev.changes.count { it.pressed }
+                        if (pressed >= 2) {
+                            tracing = false
+                            val zc = ev.calculateZoom()
+                            val pan = ev.calculatePan()
+                            val c = ev.calculateCentroid()
+                            val nz = (zm * zc).coerceIn(1f, 4f)
+                            val no = c - (c - off) * (nz / zm) + pan
+                            zm = nz
+                            off = clampOff(no, nz, w, h)
+                            ev.changes.forEach { it.consume() }
+                        } else if (pressed == 1) {
+                            val ch = ev.changes.first { it.pressed }
+                            if (tracing) {
+                                val mp = (ch.position - off) / (s0 * zm)
+                                var best = -1
+                                var bd = 24f
+                                for (j in 0..3) for (i in 0..4) {
+                                    val d = kotlin.math.hypot(mp.x - City.xs[i], mp.y - City.ys[j])
+                                    if (d < bd) {
+                                        bd = d
+                                        best = j * 5 + i
+                                    }
+                                }
+                                if (best >= 0) cb(best)
+                            } else {
+                                off = clampOff(off + ch.positionChange(), zm, w, h)
+                            }
+                            ch.consume()
+                        }
+                    } while (ev.changes.any { it.pressed })
                 }
-                if (best >= 0) cb(best)
             }
-        }
     ) {
-        scale(size.width / 358f, Offset.Zero) { drawCity(p, path, done) }
+        translate(off.x, off.y) {
+            scale(size.width / 358f * zm, Offset.Zero) { drawCity(p, path, done, started) }
+        }
     }
 }
+
+private fun clampOff(o: Offset, z: Float, w: Float, h: Float): Offset =
+    Offset(o.x.coerceIn(w - w * z, 0f), o.y.coerceIn(h - h * z, 0f))
 
 private fun DrawScope.box(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float = 0f, a: Float = 1f) =
     drawRoundRect(c, Offset(x, y), Size(w, h), CornerRadius(r, r), alpha = a)
@@ -143,8 +200,8 @@ private fun DrawScope.stopSign(x: Float, y: Float) {
     val path = Path()
     for (k in 0..7) {
         val a = (22.5 + 45.0 * k) * PI / 180.0
-        val px = x + (5.0 * cos(a)).toFloat()
-        val py = y + (5.0 * sin(a)).toFloat()
+        val px = x + (3.5 * cos(a)).toFloat()
+        val py = y + (3.5 * sin(a)).toFloat()
         if (k == 0) path.moveTo(px, py) else path.lineTo(px, py)
     }
     path.close()
@@ -158,7 +215,7 @@ private fun DrawScope.light(x: Float, y: Float) {
     drawCircle(Color(0xFF69F0AE), 2f, Offset(x, y + 3.5f))
 }
 
-private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean) {
+private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean, started: Boolean) {
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
     box(Color(0xFF9BD468), 0f, 0f, 358f, 280f)
     for (y in YS) box(Road, 0f, y - 8f, 358f, 16f)
@@ -240,15 +297,17 @@ private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean) {
             if (i < 4) box(Color.White, x + 8.5f, y + o, 5f, 2.2f, 0f, 0.85f)
         }
     }
-    val route = Path()
-    route.moveTo(50f, 260f)
-    for (n in path) route.lineTo(City.xs[n % 5], City.ys[n / 5])
-    if (done) route.lineTo(205f, 100f)
-    val rs = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
-    drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rs(9f))
-    translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rs(6f)) }
-    drawPath(route, Color(0xFF2E7BFF), style = rs(6f))
-    translate(0f, -1.3f) { drawPath(route, Color(0xFFBFE0FF), style = rs(2f)) }
+    if (started) {
+        val route = Path()
+        route.moveTo(50f, 260f)
+        for (n in path) route.lineTo(City.xs[n % 5], City.ys[n / 5])
+        if (done) route.lineTo(205f, 100f)
+        val rs = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
+        drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rs(9f))
+        translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rs(6f)) }
+        drawPath(route, Color(0xFF2E7BFF), style = rs(6f))
+        translate(0f, -1.3f) { drawPath(route, Color(0xFFBFE0FF), style = rs(2f)) }
+    }
     for (j in 0..3) for (i in 0..4) {
         val isL = (i == 1 && j == 1) || (i == 2 && j == 1) || (i == 1 && j == 2)
         for (o in floatArrayOf(-11f, 11f)) for (q in floatArrayOf(-11f, 11f)) {
