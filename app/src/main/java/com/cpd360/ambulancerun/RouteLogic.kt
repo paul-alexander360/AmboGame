@@ -93,11 +93,17 @@ object City {
 class RouteState {
     val path = mutableStateListOf(City.START)
     var done by mutableStateOf(false)
+    var started by mutableStateOf(false)
 
     fun reset() {
         path.clear()
         path.add(City.START)
         done = false
+        started = false
+    }
+
+    fun begin() {
+        if (!done) started = true
     }
 
     fun move(n: Int) {
