@@ -7,6 +7,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -33,15 +36,37 @@ private val XS = floatArrayOf(19f, 99f, 179f, 259f, 339f)
 private val YS = floatArrayOf(20f, 100f, 180f, 260f)
 
 @Composable
-fun CityMap(modifier: Modifier = Modifier) {
+fun CityMap(path: List<Int>, done: Boolean, onNode: (Int) -> Unit, modifier: Modifier = Modifier) {
     val t = rememberInfiniteTransition(label = "pulse")
     val p by t.animateFloat(
         0f, 1f,
         infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
         label = "p"
     )
-    Canvas(modifier) {
-        scale(size.width / 358f, Offset.Zero) { drawCity(p) }
+    val cb by rememberUpdatedState(onNode)
+    Canvas(
+        modifier.pointerInput(Unit) {
+            detectDragGestures { change, _ ->
+                change.consume()
+                val s = size.width / 358f
+                val x = change.position.x / s
+                val y = change.position.y / s
+                var best = -1
+                var bd = 24f
+                for (j in 0..3) for (i in 0..4) {
+                    val dx = x - City.xs[i]
+                    val dy = y - City.ys[j]
+                    val d = kotlin.math.sqrt(dx * dx + dy * dy)
+                    if (d < bd) {
+                        bd = d
+                        best = j * 5 + i
+                    }
+                }
+                if (best >= 0) cb(best)
+            }
+        }
+    ) {
+        scale(size.width / 358f, Offset.Zero) { drawCity(p, path, done) }
     }
 }
 
@@ -133,7 +158,7 @@ private fun DrawScope.light(x: Float, y: Float) {
     drawCircle(Color(0xFF69F0AE), 2f, Offset(x, y + 3.5f))
 }
 
-private fun DrawScope.drawCity(p: Float) {
+private fun DrawScope.drawCity(p: Float, path: List<Int>, done: Boolean) {
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
     box(Color(0xFF9BD468), 0f, 0f, 358f, 280f)
     for (y in YS) box(Road, 0f, y - 8f, 358f, 16f)
@@ -217,14 +242,10 @@ private fun DrawScope.drawCity(p: Float) {
     }
     val route = Path()
     route.moveTo(50f, 260f)
-    route.lineTo(99f, 260f)
-    route.lineTo(99f, 180f)
-    route.lineTo(179f, 180f)
-    route.lineTo(179f, 100f)
-    route.lineTo(205f, 100f)
+    for (n in path) route.lineTo(City.xs[n % 5], City.ys[n / 5])
+    if (done) route.lineTo(205f, 100f)
     val rs = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
-    drawPath(route, Color(0xFF2E7BFF), alpha = 0.12f, style = rs(18f))
-    drawPath(route, Color(0xFF2E7BFF), alpha = 0.22f, style = rs(12f))
+    drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rs(9f))
     translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rs(6f)) }
     drawPath(route, Color(0xFF2E7BFF), style = rs(6f))
     translate(0f, -1.3f) { drawPath(route, Color(0xFFBFE0FF), style = rs(2f)) }
