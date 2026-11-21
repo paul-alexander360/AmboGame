@@ -12,6 +12,11 @@ object City {
     private val zones = arrayOf("rrcc", "rccc", "iirr")
     const val START = 16
     const val CALL = 7
+    val STARTS = intArrayOf(16, 8)
+    val STARTPT = arrayOf(floatArrayOf(50f, 260f), floatArrayOf(205f, 100f))
+    val ENDPT = arrayOf(floatArrayOf(205f, 100f), floatArrayOf(285f, 180f))
+
+    fun isGoal(stage: Int, n: Int): Boolean = if (stage == 0) n == CALL else (n == 13 || n == 14)
 
     private fun zt(r: Int, c: Int): Double? {
         if (r < 0 || r > 2 || c < 0 || c > 3) return null
@@ -62,21 +67,23 @@ object City {
         return total
     }
 
-    fun fastest(): Double {
+    fun fastest(stage: Int): Double {
         val dist = DoubleArray(20) { Double.MAX_VALUE }
         val seen = BooleanArray(20)
-        dist[START] = 0.0
+        dist[STARTS[stage]] = 0.0
         repeat(20) {
             var u = -1
             for (n in 0 until 20) if (!seen[n] && (u == -1 || dist[n] < dist[u])) u = n
             if (u == -1 || dist[u] == Double.MAX_VALUE) return@repeat
             seen[u] = true
             for (v in 0 until 20) if (canGo(u, v)) {
-                val c = dist[u] + segTime(u, v) + (if (v == CALL) 0.0 else nodeTime(v))
+                val c = dist[u] + segTime(u, v) + (if (isGoal(stage, v)) 0.0 else nodeTime(v))
                 if (c < dist[v]) dist[v] = c
             }
         }
-        return dist[CALL]
+        var best = Double.MAX_VALUE
+        for (n in 0 until 20) if (isGoal(stage, n) && dist[n] < best) best = dist[n]
+        return best
     }
 
     fun rating(user: Double, fast: Double): Int {
@@ -91,19 +98,33 @@ object City {
 }
 
 class RouteState {
-    val path = mutableStateListOf(City.START)
+    var stage by mutableStateOf(0)
+    val path = mutableStateListOf(City.STARTS[0])
     var done by mutableStateOf(false)
     var started by mutableStateOf(false)
+    var leg1User by mutableStateOf(0.0)
+    var leg1Fast by mutableStateOf(0.0)
 
     fun reset() {
+        stage = 0
         path.clear()
-        path.add(City.START)
+        path.add(City.STARTS[0])
         done = false
         started = false
     }
 
     fun begin() {
         if (!done) started = true
+    }
+
+    fun startHospital() {
+        leg1User = City.pathTime(path.toList())
+        leg1Fast = City.fastest(0)
+        stage = 1
+        path.clear()
+        path.add(City.STARTS[1])
+        done = false
+        started = false
     }
 
     fun move(n: Int) {
@@ -116,7 +137,7 @@ class RouteState {
         }
         if (City.canGo(last, n) && !path.contains(n)) {
             path.add(n)
-            if (n == City.CALL) done = true
+            if (City.isGoal(stage, n)) done = true
         }
     }
 }
