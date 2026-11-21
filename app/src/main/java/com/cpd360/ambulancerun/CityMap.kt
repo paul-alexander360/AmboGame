@@ -67,7 +67,7 @@ fun CityMap(
     val dn by rememberUpdatedState(done)
     val pth by rememberUpdatedState(path)
     var zm by remember { mutableFloatStateOf(1f) }
-    var off by remember { mutableStateOf(Offset.Zero) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
     Canvas(
         modifier
             .clipToBounds()
@@ -77,7 +77,7 @@ fun CityMap(
                     val h = size.height.toFloat()
                     val s0 = w / 358f
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val m0 = (down.position - off) / (s0 * zm)
+                    val m0 = (down.position - mapOrigin(w, h, s0, zm, pan)) / (s0 * zm)
                     val endX = if (!st || pth.isEmpty()) 50f else City.xs[pth.last() % 5]
                     val endY = if (!st || pth.isEmpty()) 260f else City.ys[pth.last() / 5]
                     var tracing = !dn && kotlin.math.hypot(m0.x - endX, m0.y - endY) < 34f
@@ -88,17 +88,18 @@ fun CityMap(
                         if (pressed >= 2) {
                             tracing = false
                             val zc = ev.calculateZoom()
-                            val pan = ev.calculatePan()
+                            val pz = ev.calculatePan()
                             val c = ev.calculateCentroid()
-                            val nz = (zm * zc).coerceIn(1f, 4f)
-                            val no = c - (c - off) * (nz / zm) + pan
+                            val o = mapOrigin(w, h, s0, zm, pan)
+                            val nz = (zm * zc).coerceIn(1f, 5f)
+                            val no = c - (c - o) * (nz / zm) + pz
                             zm = nz
-                            off = clampOff(no, nz, w, h)
+                            pan = clampPan(no - baseOrigin(w, h, s0, nz), w, h, s0, nz)
                             ev.changes.forEach { it.consume() }
                         } else if (pressed == 1) {
-                            val ch = ev.changes.first { it.pressed }
+                            val chg = ev.changes.first { it.pressed }
                             if (tracing) {
-                                val mp = (ch.position - off) / (s0 * zm)
+                                val mp = (chg.position - mapOrigin(w, h, s0, zm, pan)) / (s0 * zm)
                                 var best = -1
                                 var bd = 24f
                                 for (j in 0..3) for (i in 0..4) {
@@ -110,22 +111,34 @@ fun CityMap(
                                 }
                                 if (best >= 0) cb(best)
                             } else {
-                                off = clampOff(off + ch.positionChange(), zm, w, h)
+                                pan = clampPan(pan + chg.positionChange(), w, h, s0, zm)
                             }
-                            ch.consume()
+                            chg.consume()
                         }
                     } while (ev.changes.any { it.pressed })
                 }
             }
     ) {
-        translate(off.x, off.y) {
-            scale(size.width / 358f * zm, Offset.Zero) { drawCity(p, path, done, started) }
+        val s0 = size.width / 358f
+        val o = mapOrigin(size.width, size.height, s0, zm, pan)
+        drawRect(Color(0xFF9BD468))
+        translate(o.x, o.y) {
+            scale(s0 * zm, Offset.Zero) { drawCity(p, path, done, started) }
         }
     }
 }
 
-private fun clampOff(o: Offset, z: Float, w: Float, h: Float): Offset =
-    Offset(o.x.coerceIn(w - w * z, 0f), o.y.coerceIn(h - h * z, 0f))
+private fun baseOrigin(w: Float, h: Float, s0: Float, z: Float): Offset =
+    Offset((w - 358f * s0 * z) / 2f, (h - 280f * s0 * z) / 2f)
+
+private fun mapOrigin(w: Float, h: Float, s0: Float, z: Float, pan: Offset): Offset =
+    baseOrigin(w, h, s0, z) + pan
+
+private fun clampPan(pn: Offset, w: Float, h: Float, s0: Float, z: Float): Offset {
+    val mx = maxOf(0f, (358f * s0 * z - w) / 2f)
+    val my = maxOf(0f, (280f * s0 * z - h) / 2f)
+    return Offset(pn.x.coerceIn(-mx, mx), pn.y.coerceIn(-my, my))
+}
 
 private fun DrawScope.box(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float = 0f, a: Float = 1f) =
     drawRoundRect(c, Offset(x, y), Size(w, h), CornerRadius(r, r), alpha = a)
