@@ -5,6 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +64,53 @@ private fun Chip(label: String, onClick: () -> Unit) {
 }
 
 @Composable
+private fun NavBtn(kind: Int, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(Color(0xE6FFFFFF), CircleShape)
+            .border(2.dp, Color(0xFF7C80C8), CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.size(28.dp)) {
+            val s = size.width
+            val c = Offset(s * 0.5f, s * 0.5f)
+            val r = CornerRadius(s * 0.12f, s * 0.12f)
+            when (kind) {
+                0 -> {
+                    drawRoundRect(Color(0xFFE53935), Offset(s * 0.1f, s * 0.12f), Size(s * 0.8f, s * 0.78f), r)
+                    val sc = Offset(s * 0.5f, s * 0.46f)
+                    drawCircle(Color.White, s * 0.24f, sc)
+                    for (a in floatArrayOf(0f, 60f, 120f)) {
+                        rotate(a, sc) {
+                            drawLine(Color(0xFF1E6FE0), Offset(s * 0.32f, s * 0.46f), Offset(s * 0.68f, s * 0.46f), s * 0.07f, StrokeCap.Round)
+                        }
+                    }
+                }
+                1 -> {
+                    drawCircle(Color(0x553FA2FF), s * 0.48f, c)
+                    drawCircle(Color(0xFF3FA2FF), s * 0.34f, c)
+                    drawRoundRect(Color.White, Offset(s * 0.36f, s * 0.46f), Size(s * 0.28f, s * 0.22f), CornerRadius(s * 0.03f, s * 0.03f))
+                    val roof = Path()
+                    roof.moveTo(s * 0.32f, s * 0.47f)
+                    roof.lineTo(s * 0.5f, s * 0.3f)
+                    roof.lineTo(s * 0.68f, s * 0.47f)
+                    roof.close()
+                    drawPath(roof, Color.White)
+                }
+                else -> {
+                    drawRoundRect(Color.White, Offset(s * 0.1f, s * 0.12f), Size(s * 0.8f, s * 0.78f), r)
+                    drawRoundRect(Color(0xFFB8BDE6), Offset(s * 0.1f, s * 0.12f), Size(s * 0.8f, s * 0.78f), r, style = Stroke(s * 0.04f))
+                    drawRoundRect(Color(0xFFE53935), Offset(s * 0.42f, s * 0.26f), Size(s * 0.16f, s * 0.5f), CornerRadius(s * 0.02f, s * 0.02f))
+                    drawRoundRect(Color(0xFFE53935), Offset(s * 0.25f, s * 0.43f), Size(s * 0.5f, s * 0.16f), CornerRadius(s * 0.02f, s * 0.02f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun HomeScreen(version: String) {
     val rs = remember { RouteState() }
     val fast = remember(rs.version, rs.stage) { rs.fastest() }
@@ -72,6 +129,16 @@ fun HomeScreen(version: String) {
             .background(Color(0xFF9BD468))
     ) {
         CityMap(rs, Modifier.fillMaxSize())
+        Column(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            NavBtn(0) { rs.focusStation() }
+            NavBtn(1) { rs.focusCall() }
+            NavBtn(2) { rs.focusHospital() }
+        }
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
