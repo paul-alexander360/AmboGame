@@ -31,6 +31,29 @@ class RouteState {
     var leg1Fast by mutableStateOf(0.0)
     var reached by mutableStateOf<Hospital?>(null)
     val needLevel = 4
+    var focusTick by mutableIntStateOf(0)
+    var focusPt by mutableStateOf(Offset.Zero)
+    private var hospCycle = -1
+
+    private fun focus(x: Float, y: Float) {
+        focusPt = Offset(x, y)
+        focusTick++
+    }
+
+    fun focusStation() {
+        focus(city.slotX(city.station), city.slotY(city.station))
+    }
+
+    fun focusCall() {
+        focus(city.slotX(city.call), city.slotY(city.call))
+    }
+
+    fun focusHospital() {
+        val hs = city.hospitals
+        if (hs.isEmpty()) return
+        hospCycle = (hospCycle + 1) % hs.size
+        focus(city.slotX(hs[hospCycle].slot), city.slotY(hs[hospCycle].slot))
+    }
 
     fun startSlot(): Slot = if (stage == 0) city.station else city.call
 
@@ -67,6 +90,7 @@ class RouteState {
         level = l
         idx = i
         city = CityData(l, i, Random.nextLong())
+        hospCycle = -1
         resetRun()
         version++
     }
