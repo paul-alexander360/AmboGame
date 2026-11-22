@@ -41,9 +41,22 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+private fun Chip(label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .background(Color(0xE6FFFFFF), RoundedCornerShape(16.dp))
+            .border(2.dp, Color(0xFF7C80C8), RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(label, fontSize = 13.sp)
+    }
+}
+
+@Composable
 fun HomeScreen(version: String) {
     val rs = remember { RouteState() }
-    val fast = remember(rs.stage) { City.fastest(rs.stage) }
+    val fast = remember(rs.version, rs.stage) { rs.fastest() }
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
     if (screen == 1) {
@@ -58,7 +71,7 @@ fun HomeScreen(version: String) {
             .fillMaxSize()
             .background(Color(0xFF9BD468))
     ) {
-        CityMap(rs.path, rs.done, rs.started, rs.stage, { rs.begin() }, { rs.move(it) }, Modifier.fillMaxSize())
+        CityMap(rs, Modifier.fillMaxSize())
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -70,13 +83,16 @@ fun HomeScreen(version: String) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (rs.stage == 0) "Call: 214 Elm St" else "To the hospital", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "City " + rs.level + "." + (rs.idx + 1) + (if (rs.stage == 0) ": call" else ": hospital"),
+                color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
+            )
             Box(
                 modifier = Modifier
                     .background(Color(0xFFFFF3E0), RoundedCornerShape(12.dp))
                     .padding(horizontal = 10.dp, vertical = 3.dp)
             ) {
-                Text("Par " + City.fmt(par), color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("Par " + fmt(par), color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
         Column(
@@ -95,12 +111,17 @@ fun HomeScreen(version: String) {
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(if (rs.stage == 0) "Drag from the station to the glowing building. Pinch to zoom, drag elsewhere to move the map." else "Drag from the ambulance to the glowing hospital. Pinch to zoom, drag elsewhere to move the map.", fontSize = 15.sp)
+                    Text(
+                        if (rs.stage == 0) "Drag from the red station to the glowing building. Pinch to zoom, drag elsewhere to move the map."
+                        else "Drag from the ambulance to a glowing hospital. Pinch to zoom, drag elsewhere to move the map.",
+                        fontSize = 15.sp
+                    )
                 }
             } else {
-                val user = City.pathTime(rs.path.toList())
-                val rating = City.rating(user, fast)
-                val failed = user > par
+                val user = rs.city.pathTime(rs.path.toList())
+                val wrong = rs.wrongHospital()
+                val failed = user > par || wrong
+                val rt = rating(user, fast)
                 val names = listOf("Green", "Yellow", "Orange", "Red")
                 val cols = listOf(Color(0xFF4DC43B), Color(0xFFFFD54F), Color(0xFFFF9800), Color(0xFFE53935))
                 Column(
@@ -110,20 +131,27 @@ fun HomeScreen(version: String) {
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(if (failed) "Too slow! Call failed" else "Route complete", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (wrong) "Wrong hospital! Call failed" else if (user > par) "Too slow! Call failed" else "Route complete",
+                        fontSize = 18.sp, fontWeight = FontWeight.Bold
+                    )
                     if (rs.stage == 1) {
-                        Text("To the call: " + City.fmt(rs.leg1User) + "   Fastest " + City.fmt(rs.leg1Fast), fontSize = 14.sp)
+                        Text("To the call: " + fmt(rs.leg1User) + "   Fastest " + fmt(rs.leg1Fast), fontSize = 14.sp)
                     }
-                    Text((if (rs.stage == 1) "To the hospital: " else "Your time ") + City.fmt(user) + "   Fastest " + City.fmt(fast), fontSize = 14.sp)
+                    Text(
+                        (if (rs.stage == 1) "To the hospital: " else "Your time ") + fmt(user) + "   Fastest " + fmt(fast),
+                        fontSize = 14.sp
+                    )
                     Spacer(Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
-                            .background(cols[rating], RoundedCornerShape(16.dp))
+                            .background(cols[rt], RoundedCornerShape(16.dp))
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Text(names[rating] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(names[rt] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                     if (!failed && rs.stage == 0) {
+                        Spacer(Modifier.height(10.dp))
                         Box(
                             modifier = Modifier
                                 .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
@@ -134,16 +162,12 @@ fun HomeScreen(version: String) {
                             Text("Treat patient", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Box(
-                        modifier = Modifier
-                            .border(2.dp, Color(0xFF7C80C8), RoundedCornerShape(16.dp))
-                            .clickable { rs.reset() }
-                            .padding(horizontal = 18.dp, vertical = 8.dp)
-                    ) {
-                        Text("Test again", fontSize = 14.sp)
-                    }
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (rs.done) Chip("Test again") { rs.reset() }
+                Chip("Next city (test)") { rs.nextCity() }
             }
             Spacer(Modifier.height(6.dp))
             Text("Version $version", color = Color.White, fontSize = 12.sp)
