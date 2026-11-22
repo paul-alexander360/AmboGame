@@ -74,6 +74,19 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
             pan = clampPan(target - base, city, w, h, s0, z)
         }
     }
+    LaunchedEffect(rs.focusTick) {
+        if (rs.focusTick > 0 && sz.width > 0) {
+            val w = sz.width.toFloat()
+            val h = sz.height.toFloat()
+            val s0 = w / city.w
+            val z = (city.w / 240f).coerceIn(1f, 8f)
+            val fp = rs.focusPt
+            val base = baseOrigin(city, w, h, s0, z)
+            val target = Offset(w / 2f - fp.x * s0 * z, h / 2f - fp.y * s0 * z)
+            zm = z
+            pan = clampPan(target - base, city, w, h, s0, z)
+        }
+    }
     Box(
         modifier
             .clipToBounds()
@@ -96,12 +109,30 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                         val pressed = ev.changes.count { it.pressed }
                         if (pressed >= 2) {
                             tracing = false
-                            val zc = ev.calculateZoom()
-                            val pz = ev.calculatePan()
-                            val cc = ev.calculateCentroid()
+                            val pr = ev.changes.filter { it.pressed }
+                            var sx = 0f
+                            var sy = 0f
+                            var qx = 0f
+                            var qy = 0f
+                            for (q in pr) {
+                                sx += q.position.x
+                                sy += q.position.y
+                                qx += q.previousPosition.x
+                                qy += q.previousPosition.y
+                            }
+                            val kk = pr.size.toFloat()
+                            val cc = Offset(sx / kk, sy / kk)
+                            val pc = Offset(qx / kk, qy / kk)
+                            var spread = 0f
+                            var spreadPrev = 0f
+                            for (q in pr) {
+                                spread += hypot(q.position.x - cc.x, q.position.y - cc.y)
+                                spreadPrev += hypot(q.previousPosition.x - pc.x, q.previousPosition.y - pc.y)
+                            }
+                            val zc = if (spreadPrev > 1f) spread / spreadPrev else 1f
                             val o = mapOrigin(cty, w, h, s0, zm, pan)
-                            val nz = (zm * zc).coerceIn(1f, 6f)
-                            val no = cc - (cc - o) * (nz / zm) + pz
+                            val nz = (zm * zc).coerceIn(1f, 8f)
+                            val no = cc - (pc - o) * (nz / zm)
                             zm = nz
                             pan = clampPan(no - baseOrigin(cty, w, h, s0, nz), cty, w, h, s0, nz)
                             ev.changes.forEach { it.consume() }
@@ -403,30 +434,71 @@ private fun DrawScope.glow(cx: Float, cy: Float, p: Float, k: Float) {
     box(blue, cx - 11f, cy - 12f, 22f, 24f, 6f, 0.05f + 0.3f * k)
 }
 
-private fun DrawScope.amb(x: Float, y: Float, deg: Float) = translate(x, y) {
-    rotate(deg, Offset.Zero) {
-        scale(0.7f, Offset.Zero) {
-            drawOval(Color.Black, Offset(-17f, 5f), Size(34f, 8f), alpha = 0.2f)
-            box(Color(0xFFB0BEC5), -16f, -8f, 32f, 18f, 7f)
-            box(Color.White, -16f, -11f, 32f, 18f, 7f)
-            box(Color(0xFFE53935), -3f, -7f, 6f, 11f, 1f)
-            box(Color(0xFFE53935), -6f, -4f, 12f, 5f, 1f)
-            drawCircle(Color(0xFF2979FF), 3.5f, Offset(10f, -11f))
-            drawCircle(Color(0xFFFF5252), 3.5f, Offset(-10f, -11f))
-            drawCircle(Color(0xFF37474F), 3f, Offset(-10f, 8f))
-            drawCircle(Color(0xFF37474F), 3f, Offset(10f, 8f))
-        }
+private fun DrawScope.ambSide(x: Float, y: Float, flip: Boolean) = translate(x, y) {
+    scale(if (flip) -0.6f else 0.6f, 0.6f, Offset.Zero) {
+        val red = Color(0xFFE53935)
+        val top = Color(0xFFEF5350)
+        val dark = Color(0xFFB71C1C)
+        drawOval(Color.Black, Offset(-24f, 8f), Size(52f, 9f), alpha = 0.2f)
+        poly(red, 1f, -22f, -8f, 6f, -8f, 6f, 6f, -22f, 6f)
+        poly(top, 1f, -22f, -8f, 6f, -8f, 10f, -12f, -18f, -12f)
+        poly(dark, 1f, 6f, -8f, 10f, -12f, 10f, 2f, 6f, 6f)
+        poly(Color.White, 0.8f, -22f, 3f, 6f, 3f, 6f, 5f, -22f, 5f)
+        poly(red, 1f, 6f, -3f, 16f, -3f, 22f, 1f, 22f, 6f, 6f, 6f)
+        poly(top, 1f, 6f, -3f, 16f, -3f, 19f, -6f, 9f, -6f)
+        poly(Color(0xFFBDE7FF), 1f, 8f, -2f, 15f, -2f, 19f, 1f, 8f, 1f)
+        poly(dark, 1f, 22f, 1f, 24f, -1f, 24f, 6f, 22f, 6f)
+        drawCircle(Color(0xFF263238), 5f, Offset(-12f, 7f))
+        drawCircle(Color(0xFFB0BEC5), 2.2f, Offset(-12f, 7f))
+        drawCircle(Color(0xFF263238), 5f, Offset(14f, 7f))
+        drawCircle(Color(0xFFB0BEC5), 2.2f, Offset(14f, 7f))
+        box(Color.White, -14f, -6f, 12f, 10f, 1.5f)
+        box(red, -12f, -2.5f, 8f, 3f, 0.5f)
+        box(red, -9.5f, -5f, 3f, 8f, 0.5f)
+        box(Color.White, -15f, -11.5f, 6f, 3f, 1f)
+        box(Color(0xFFFF1744), -14.3f, -11f, 4.6f, 2f, 0.8f)
+        box(Color.White, -6f, -11.5f, 6f, 3f, 1f)
+        box(Color(0xFFFF1744), -5.3f, -11f, 4.6f, 2f, 0.8f)
+        drawCircle(Color.White, 2.2f, Offset(-21f, -7f))
+        drawCircle(Color(0xFFFF1744), 1.4f, Offset(-21f, -7f))
+        drawCircle(Color.White, 2.2f, Offset(5f, -7f))
+        drawCircle(Color(0xFFFF1744), 1.4f, Offset(5f, -7f))
+        drawCircle(Color(0xFFFFEB3B), 1.5f, Offset(23f, 2f))
+    }
+}
+
+private fun DrawScope.ambFront(x: Float, y: Float) = translate(x, y) {
+    scale(0.6f, Offset.Zero) {
+        val red = Color(0xFFE53935)
+        drawOval(Color.Black, Offset(-14f, 9f), Size(28f, 7f), alpha = 0.2f)
+        box(Color(0xFF263238), -15f, 5f, 4f, 9f, 1.5f)
+        box(Color(0xFF263238), 11f, 5f, 4f, 9f, 1.5f)
+        drawCircle(Color(0xFFB0BEC5), 1.3f, Offset(-15.2f, 9.5f))
+        drawCircle(Color(0xFFB0BEC5), 1.3f, Offset(15.2f, 9.5f))
+        poly(Color(0xFFEF5350), 1f, -10f, -17f, 10f, -17f, 12f, -12f, -12f, -12f)
+        poly(red, 1f, -12f, -12f, 12f, -12f, 12f, -1f, -12f, -1f)
+        poly(Color.White, 0.8f, -12f, -6f, 12f, -6f, 12f, -4f, -12f, -4f)
+        poly(Color(0xFFBDE7FF), 1f, -9f, 0f, 9f, 0f, 10f, 5f, -10f, 5f)
+        poly(red, 1f, -11f, 5f, 11f, 5f, 11f, 11f, -11f, 11f)
+        box(Color(0xFF37474F), -5f, 7f, 10f, 3f, 1f)
+        drawCircle(Color(0xFFFFEB3B), 1.8f, Offset(-8f, 8.5f))
+        drawCircle(Color(0xFFFFEB3B), 1.8f, Offset(8f, 8.5f))
+        box(Color(0xFFB0BEC5), -12f, 11f, 24f, 2.5f, 1f)
+        box(Color.White, -7f, -16.5f, 5f, 3f, 1f)
+        box(Color(0xFFFF1744), -6.5f, -16f, 4f, 2f, 0.8f)
+        box(Color.White, 2f, -16.5f, 5f, 3f, 1f)
+        box(Color(0xFFFF1744), 2.5f, -16f, 4f, 2f, 0.8f)
+        drawCircle(Color.White, 2.2f, Offset(-11.5f, -12.5f))
+        drawCircle(Color(0xFFFF1744), 1.4f, Offset(-11.5f, -12.5f))
+        drawCircle(Color.White, 2.2f, Offset(11.5f, -12.5f))
+        drawCircle(Color(0xFFFF1744), 1.4f, Offset(11.5f, -12.5f))
     }
 }
 
 private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
     val c = rs.city
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
-    if (rs.stage == 0) {
-        glow(c.slotX(c.call), c.slotY(c.call), p, k)
-    } else {
-        for (h in rs.correct()) glow(c.slotX(h.slot), c.slotY(h.slot), p, k)
-    }
+    if (rs.stage == 0) glow(c.slotX(c.call), c.slotY(c.call), p, k)
     if (rs.started) {
         val route = Path()
         val sp = rs.startPt()
@@ -445,5 +517,10 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
     val s = rs.startSlot()
     val ax = c.accX(s)
     val ay = c.accY(s)
-    if (s.corner == 1 || s.corner == 2) amb(ax + 16f, ay + 4f, 0f) else amb(ax + 4f, ay - 16f, -90f)
+    if (s.corner == 1 || s.corner == 2) {
+        val west = c.owH[if (s.corner == 1) s.br else s.br + 1] == 2
+        ambSide(ax + 16f, ay + 4f, west)
+    } else {
+        ambFront(ax + 4f, ay - 16f)
+    }
 }
