@@ -1,116 +1,98 @@
 package com.cpd360.ambulancerun
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlin.math.abs
+import androidx.compose.ui.geometry.Offset
+import kotlin.random.Random
 
-object City {
-    val xs = floatArrayOf(19f, 99f, 179f, 259f, 339f)
-    val ys = floatArrayOf(20f, 100f, 180f, 260f)
-    private val zones = arrayOf("rrcc", "rccc", "iirr")
-    const val START = 16
-    const val CALL = 7
-    val STARTS = intArrayOf(16, 8)
-    val STARTPT = arrayOf(floatArrayOf(50f, 260f), floatArrayOf(205f, 100f))
-    val ENDPT = arrayOf(floatArrayOf(205f, 100f), floatArrayOf(285f, 180f))
+fun fmt(s: Double): String {
+    val t = Math.round(s).toInt()
+    return "%d:%02d".format(t / 60, t % 60)
+}
 
-    fun isGoal(stage: Int, n: Int): Boolean = if (stage == 0) n == CALL else (n == 13 || n == 14)
-
-    private fun zt(r: Int, c: Int): Double? {
-        if (r < 0 || r > 2 || c < 0 || c > 3) return null
-        return if (zones[r][c] == 'r') 0.2 else 0.5
-    }
-
-    private fun isLight(n: Int): Boolean {
-        val i = n % 5
-        val j = n / 5
-        return (i == 1 && j == 1) || (i == 2 && j == 1) || (i == 1 && j == 2)
-    }
-
-    fun canGo(a: Int, b: Int): Boolean {
-        val i1 = a % 5
-        val j1 = a / 5
-        val i2 = b % 5
-        val j2 = b / 5
-        if (j1 == j2 && abs(i1 - i2) == 1) return j1 != 1 || i2 > i1
-        if (i1 == i2 && abs(j1 - j2) == 1) return i1 != 2 || j2 < j1
-        return false
-    }
-
-    private fun segTime(a: Int, b: Int): Double {
-        val i1 = a % 5
-        val j1 = a / 5
-        val i2 = b % 5
-        val j2 = b / 5
-        val t: List<Double?> = if (j1 == j2) {
-            val i = minOf(i1, i2)
-            listOf(zt(j1 - 1, i), zt(j1, i))
-        } else {
-            val j = minOf(j1, j2)
-            listOf(zt(j, i1 - 1), zt(j, i1))
-        }
-        val v = t.filterNotNull()
-        val traffic = if (v.isEmpty()) 0.0 else v.average()
-        return 30.0 * (1.0 + traffic + 0.2)
-    }
-
-    private fun nodeTime(n: Int): Double = 1.0 + (if (isLight(n)) 4.0 else 2.0)
-
-    fun pathTime(path: List<Int>): Double {
-        var total = 0.0
-        for (k in 1 until path.size) {
-            total += segTime(path[k - 1], path[k])
-            if (k < path.size - 1) total += nodeTime(path[k])
-        }
-        return total
-    }
-
-    fun fastest(stage: Int): Double {
-        val dist = DoubleArray(20) { Double.MAX_VALUE }
-        val seen = BooleanArray(20)
-        dist[STARTS[stage]] = 0.0
-        repeat(20) {
-            var u = -1
-            for (n in 0 until 20) if (!seen[n] && (u == -1 || dist[n] < dist[u])) u = n
-            if (u == -1 || dist[u] == Double.MAX_VALUE) return@repeat
-            seen[u] = true
-            for (v in 0 until 20) if (canGo(u, v)) {
-                val c = dist[u] + segTime(u, v) + (if (isGoal(stage, v)) 0.0 else nodeTime(v))
-                if (c < dist[v]) dist[v] = c
-            }
-        }
-        var best = Double.MAX_VALUE
-        for (n in 0 until 20) if (isGoal(stage, n) && dist[n] < best) best = dist[n]
-        return best
-    }
-
-    fun rating(user: Double, fast: Double): Int {
-        val r = user / fast
-        return if (r <= 1.05) 0 else if (r <= 1.25) 1 else if (r <= 1.6) 2 else 3
-    }
-
-    fun fmt(s: Double): String {
-        val t = Math.round(s).toInt()
-        return "%d:%02d".format(t / 60, t % 60)
-    }
+fun rating(user: Double, fast: Double): Int {
+    val r = user / fast
+    return if (r <= 1.05) 0 else if (r <= 1.25) 1 else if (r <= 1.6) 2 else 3
 }
 
 class RouteState {
-    var stage by mutableStateOf(0)
-    val path = mutableStateListOf(City.STARTS[0])
+    var level by mutableIntStateOf(1)
+    var idx by mutableIntStateOf(0)
+    var city by mutableStateOf(CityData(1, 0, Random.nextLong()))
+    var version by mutableIntStateOf(0)
+    var stage by mutableIntStateOf(0)
+    val path = mutableStateListOf<Int>()
     var done by mutableStateOf(false)
     var started by mutableStateOf(false)
     var leg1User by mutableStateOf(0.0)
     var leg1Fast by mutableStateOf(0.0)
+    var reached by mutableStateOf<Hospital?>(null)
+    val needLevel = 4
 
-    fun reset() {
+    fun startSlot(): Slot = if (stage == 0) city.station else city.call
+
+    fun startPt(): Offset {
+        val s = startSlot()
+        return Offset(city.accX(s), city.accY(s))
+    }
+
+    fun endPt(): Offset {
+        if (stage == 0) return Offset(city.accX(city.call), city.accY(city.call))
+        val h = reached ?: return Offset(0f, 0f)
+        return Offset(city.accX(h.slot), city.accY(h.slot))
+    }
+
+    fun correct(): List<Hospital> = city.hospitals.filter { it.level >= needLevel }
+
+    fun starts(): IntArray = city.startNodes(startSlot())
+
+    fun goals(): IntArray {
+        if (stage == 0) return city.goalNodes(city.call)
+        val l = ArrayList<Int>()
+        for (h in correct()) for (g in city.goalNodes(h.slot)) l.add(g)
+        return l.toIntArray()
+    }
+
+    fun fastest(): Double = city.fastest(starts(), goals())
+
+    fun wrongHospital(): Boolean {
+        val h = reached
+        return stage == 1 && done && h != null && h.level < needLevel
+    }
+
+    fun load(l: Int, i: Int) {
+        level = l
+        idx = i
+        city = CityData(l, i, Random.nextLong())
+        resetRun()
+        version++
+    }
+
+    private fun resetRun() {
         stage = 0
         path.clear()
-        path.add(City.STARTS[0])
         done = false
         started = false
+        reached = null
+    }
+
+    fun reset() {
+        resetRun()
+        version++
+    }
+
+    fun nextCity() {
+        var l = level
+        var i = idx + 1
+        if (i > 4) {
+            i = 0
+            l++
+            if (l > 8) l = 1
+        }
+        load(l, i)
     }
 
     fun begin() {
@@ -118,26 +100,52 @@ class RouteState {
     }
 
     fun startHospital() {
-        leg1User = City.pathTime(path.toList())
-        leg1Fast = City.fastest(0)
+        leg1User = city.pathTime(path.toList())
+        leg1Fast = fastest()
         stage = 1
         path.clear()
-        path.add(City.STARTS[1])
         done = false
         started = false
+        reached = null
+        version++
+    }
+
+    private fun arrive(n: Int) {
+        if (stage == 0) {
+            if (goals().contains(n)) done = true
+            return
+        }
+        var found: Hospital? = null
+        for (h in city.hospitals) {
+            if (city.goalNodes(h.slot).contains(n)) {
+                if (found == null || (h.level >= needLevel && found.level < needLevel)) found = h
+            }
+        }
+        if (found != null) {
+            reached = found
+            done = true
+        }
     }
 
     fun move(n: Int) {
         if (done) return
+        if (path.isEmpty()) {
+            if (starts().contains(n)) {
+                path.add(n)
+                started = true
+                arrive(n)
+            }
+            return
+        }
         val last = path.last()
         if (n == last) return
         if (path.size > 1 && n == path[path.size - 2]) {
             path.removeAt(path.size - 1)
             return
         }
-        if (City.canGo(last, n) && !path.contains(n)) {
+        if (city.canGo(last, n) && !path.contains(n)) {
             path.add(n)
-            if (City.isGoal(stage, n)) done = true
+            arrive(n)
         }
     }
 }
