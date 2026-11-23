@@ -208,6 +208,34 @@ class Patient(val level: Int, rnd: Random) {
         return ""
     }
 
+    // Tests this patient should get, only the ones unlocked at this level
+    fun neededTests(): List<Int> {
+        val l = ArrayList<Int>()
+        if (kind != ARREST) l.add(0)
+        when (kind) {
+            CARDIAC -> l.add(4)
+            RESP -> l.add(1)
+            DIABETIC -> l.add(2)
+            NEURO -> {
+                l.add(3)
+                l.add(2)
+            }
+        }
+        return l.filter { level >= testLevels[it] }
+    }
+
+    fun missedTests(): List<Int> = neededTests().filter { !tested[it] }
+
+    // Treatments this patient needed but did not get
+    fun missedTreats(): List<Int> {
+        val l = ArrayList<Int>()
+        if (level >= 3 && startOx in 1..89 && !treated[0]) l.add(0)
+        if (level >= 4 && startGlu == 0 && !treated[1]) l.add(1)
+        if (level >= 5 && injury > 0 && !treated[2]) l.add(2)
+        if (level >= 8 && kind == CARDIAC && (startHr < 80 || startHr > 120) && !treated[4]) l.add(4)
+        return l
+    }
+
     companion object {
         fun make(level: Int): Patient = Patient(level, Random(Random.nextLong()))
 
