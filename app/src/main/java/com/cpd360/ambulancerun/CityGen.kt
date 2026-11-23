@@ -43,6 +43,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     val h: Float = 80f * n + 40f
     var drv: Double = 0.1
     var heavy: Double = 0.0
+    var cross: Double = 1.0
     val distraction: Double = Levels.distraction[level - 1]
     val zone = IntArray(n * n)
     val dens = IntArray(n * n)
@@ -300,7 +301,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return Math.round(maxOf(0.01, c) * 1000.0) / 1000.0
     }
 
-    private fun nodeTime(u: Int): Double = 1.0 + (if (light[u]) 4.0 else 2.0)
+    private fun nodeTime(u: Int): Double = (1.0 + (if (light[u]) 4.0 else 2.0)) * cross
 
     fun pathTime(path: List<Int>): Double {
         var total = 0.0
