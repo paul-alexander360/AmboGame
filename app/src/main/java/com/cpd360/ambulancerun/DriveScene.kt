@@ -113,12 +113,18 @@ private class DrivePlan(city: CityData, nodes: List<Int>, start: Offset, end: Of
     private fun laneOff(s: Int): Float {
         val a = pts[s]
         val b = pts[s + 1]
+        // One-way traffic uses the middle and right lanes of its flow, so the
+        // ambulance takes the lane on the flow's left, even when going against it
         if (abs(a[1] - b[1]) < 0.01f) {
             val j = (a[1] / BL).roundToInt().coerceIn(0, owH.size - 1)
-            return if (owH[j] == 0) 1.75f else -3.5f
+            if (owH[j] == 0) return 1.75f
+            val flow = if (owH[j] == 1) 1f else -1f
+            return if ((b[0] - a[0]) * flow >= 0f) -3.5f else 3.5f
         }
         val i = (a[0] / BL).roundToInt().coerceIn(0, owV.size - 1)
-        return if (owV[i] == 0) 1.75f else -3.5f
+        if (owV[i] == 0) return 1.75f
+        val flow = if (owV[i] == 1) -1f else 1f
+        return if ((b[1] - a[1]) * flow >= 0f) -3.5f else 3.5f
     }
 
     private fun angLerp(a: Float, b: Float, f: Float): Float {
@@ -158,6 +164,13 @@ private class DrivePlan(city: CityData, nodes: List<Int>, start: Offset, end: Of
 }
 
 private class Obj(val d: Float, val fn: () -> Unit)
+
+// Lets each car stop or hurry so it never drives through the ambulance or
+// another car. delay is how many seconds each car is behind its schedule.
+private class Traffic(n: Int) {
+    val delay = FloatArray(12 * (n + 2))
+    var lastT = 0f
+}
 
 // Quadratic curve written as a cubic, from (x0, y0) through control (cx, cy) to (x2, y2)
 private fun Path.qTo(x0: Float, y0: Float, cx: Float, cy: Float, x2: Float, y2: Float) {
@@ -264,7 +277,7 @@ private class Renderer(val ds: DrawScope, val cam: DriveCam) {
     }
 }
 
-private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destKey: Int, crashAt: FloatArray?) {
+private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destKey: Int, crashAt: FloatArray?, tr: Traffic) {
     val d = plan.distAt(t)
     val cam = plan.camAt(d)
     val r = Renderer(this, cam)
@@ -384,31 +397,106 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
             })
         }
     }
-    // traffic: cars travel the length of each street, one-way streets go one way
+    // traffic: cars travel the length of each street, one-way streets go one way.
+    // Cars yield to the ambulance: they stop at the stop line of any intersection
+    // it is about to cross, hurry out of that intersection if already in it,
+    // stop if the ambulance is in their path, and never drive into the car ahead.
+    val dt = (t - tr.lastT).coerceIn(0f, 0.1f)
+    tr.lastT = t
+    val bodyX = floatArrayOf(cam.px + cam.hx * 1.5f, cam.px - cam.hx * 1f, cam.px - cam.hx * 3.5f)
+    val bodyY = floatArrayOf(cam.py + cam.hy * 1.5f, cam.py - cam.hy * 1f, cam.py - cam.hy * 3.5f)
+    fun touchesAmbo(x: Float, y: Float, rad: Float): Boolean {
+        for (q in 0..2) if (hypot(x - bodyX[q], y - bodyY[q]) < rad) return true
+        return false
+    }
+    // route intersections the ambulance is close to and has not yet cleared
+    val active = ArrayList<FloatArray>()
+    for (q in 1 until plan.pts.size - 1) {
+        val ix = plan.pts[q][0]
+        val iy = plan.pts[q][1]
+        val dx = ix - cam.px
+        val dy = iy - cam.py
+        if (hypot(dx, dy) < 70f && dx * cam.hx + dy * cam.hy > -14f) active.add(floatArrayOf(ix, iy))
+    }
+    fun isActive(x: Float, y: Float): Boolean {
+        for (a in active) if (abs(a[0] - x) < 1f && abs(a[1] - y) < 1f) return true
+        return false
+    }
     var cid = 0
     fun streetCars(horiz: Boolean, idx: Int, ow: Int) {
         val dirs = if (ow == 0) intArrayOf(1, -1) else intArrayOf(if (ow == 1) (if (horiz) 1 else -1) else (if (horiz) -1 else 1))
         for (dr in dirs) {
             val lanes = if (ow == 0) floatArrayOf(5.25f) else floatArrayOf(0f, 3.5f)
-            for (ln in lanes) for (k in 0..2) {
-                cid++
-                val sp = 5f + (cid * 37 % 5)
-                var u = ((cid * 97 % 100) / 100f * total + dr * sp * t) % total
-                if (u < 0f) u += total
-                val ax = if (horiz) dr.toFloat() else 0f
-                val ay = if (horiz) 0f else dr.toFloat()
-                val rx = -ay
-                val ry = ax
-                val cx = (if (horiz) u else idx * BL) + rx * ln
-                val cy = (if (horiz) idx * BL else u) + ry * ln
-                val dd = hypot(cx - cam.px, cy - cam.py)
-                if (dd > 200f || dd < 3f) continue
-                val c = carCols[cid % carCols.size]
-                val sideC = lerp(c, Color.Black, 0.25f)
-                objs.add(Obj(dd) {
-                    r.box(cx, cy, ax, ay, 2.2f, 0.95f, 0.3f, 1.1f, c, sideC, c)
-                    r.box(cx - ax * 0.3f, cy - ay * 0.3f, ax, ay, 1.2f, 0.85f, 1.1f, 1.75f, Color(0xFF37474F), Color(0xFF263238), Color(0xFFECEFF1))
-                })
+            val ax = if (horiz) dr.toFloat() else 0f
+            val ay = if (horiz) 0f else dr.toFloat()
+            val rx = -ay
+            val ry = ax
+            val across = idx * BL
+            for (ln in lanes) {
+                val ids = IntArray(3)
+                val sps = FloatArray(3)
+                val us = FloatArray(3)
+                fun place(k: Int): Float {
+                    val id = ids[k]
+                    var u = ((id * 97 % 100) / 100f * total + dr * sps[k] * (t - tr.delay[id % tr.delay.size])) % total
+                    if (u < 0f) u += total
+                    return u
+                }
+                for (k in 0..2) {
+                    cid++
+                    ids[k] = cid
+                    sps[k] = 5f + (cid * 37 % 5)
+                    us[k] = place(k)
+                }
+                for (k in 0..2) {
+                    val u = us[k]
+                    val cx = (if (horiz) u else across) + rx * ln
+                    val cy = (if (horiz) across else u) + ry * ln
+                    val fu = u + dr * 2.2f
+                    val ru = u - dr * 2.2f
+                    val nextA = if (dr > 0) kotlin.math.ceil(fu / BL) * BL else floor(fu / BL) * BL
+                    val prevA = nextA - dr * BL
+                    val gap = abs(nextA - fu)
+                    val nx = if (horiz) nextA else across
+                    val ny = if (horiz) across else nextA
+                    val px = if (horiz) prevA else across
+                    val py = if (horiz) across else prevA
+                    var halt = false
+                    var hurry = false
+                    if (gap >= 10.5f && gap <= 12.5f && isActive(nx, ny)) halt = true
+                    else if ((gap < 10.5f && isActive(nx, ny)) || (dr * (ru - prevA) < 10.5f && isActive(px, py))) hurry = true
+                    // the ambulance is in the car's path
+                    if (!touchesAmbo(cx, cy, 2.6f)) {
+                        var sAhead = 0f
+                        while (sAhead <= 6f) {
+                            if (touchesAmbo(cx + ax * (2.2f + sAhead), cy + ay * (2.2f + sAhead), 2.6f)) halt = true
+                            sAhead += 1.5f
+                        }
+                    }
+                    // the car ahead in this lane
+                    for (o in 0..2) {
+                        if (o == k) continue
+                        val ahead = dr * (us[o] - u)
+                        if (ahead > 0f && ahead < 6.6f) halt = true
+                    }
+                    val slot = ids[k] % tr.delay.size
+                    if (halt) tr.delay[slot] += dt
+                    else if (hurry) tr.delay[slot] -= dt
+                }
+                for (k in 0..2) {
+                    val id = ids[k]
+                    val u = place(k)
+                    val cx = (if (horiz) u else across) + rx * ln
+                    val cy = (if (horiz) across else u) + ry * ln
+                    val dd = hypot(cx - cam.px, cy - cam.py)
+                    if (dd > 200f || dd < 3f) continue
+                    val c = carCols[id % carCols.size]
+                    val sideC = lerp(c, Color.Black, 0.25f)
+                    objs.add(Obj(dd) {
+                        r.box(cx, cy, ax, ay, 2.2f, 0.95f, 0.3f, 1.1f, c, sideC, c)
+                        r.box(cx - ax * 0.3f, cy - ay * 0.3f, ax, ay, 1.2f, 0.85f, 1.1f, 1.75f, Color(0xFF37474F), Color(0xFF263238), Color(0xFFECEFF1))
+                    })
+                }
             }
         }
     }
@@ -554,6 +642,7 @@ fun DriveScene(
         if (crash) floatArrayOf(DrivePlan.wx(end.x) + 4f, DrivePlan.wy(end.y) + 4f) else null
     }
     var t by remember { mutableFloatStateOf(0f) }
+    val traffic = remember(plan) { Traffic(city.n) }
     val done by rememberUpdatedState(onDone)
     val finished = remember { booleanArrayOf(false) }
     fun finish() {
@@ -583,7 +672,7 @@ fun DriveScene(
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF1D2027))) {
         Canvas(Modifier.fillMaxSize()) {
-            drawWorld(city, plan, t, destKey, crashAt)
+            drawWorld(city, plan, t, destKey, crashAt, traffic)
             drawCab(t, plan.distAt(t))
         }
         val cam = plan.camAt(plan.distAt(t))
