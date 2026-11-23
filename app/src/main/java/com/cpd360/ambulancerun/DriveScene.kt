@@ -207,6 +207,112 @@ private val roofCols = listOf(Color(0xFFE2583E), Color(0xFF3F8EDC), Color(0xFF2B
 private val awningCols = listOf(Color(0xFFE53935), Color(0xFF43A047), Color(0xFF1E88E5))
 private val treeCols = listOf(Color(0xFF43A047), Color(0xFF2E7D32), Color(0xFF66BB6A))
 private val shadowCol = Color(0x29283C5A)
+private val capCols = listOf(Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFF43A047))
+private val carGlass = Color(0xFF3B5568)
+// direction the light comes from, for shading the sides of cars
+private const val LX = -0.55f
+private const val LY = -0.83f
+
+private class PedLook(
+    val pid: Int, val shirt: Color, val skin: Color, val hair: Color, val pants: Color,
+    val bag: Boolean, val dog: Boolean, val long: Boolean, val cap: Boolean, val capC: Color
+)
+
+// Outline of a box with its corners cut off, ol shifts it along its length
+private fun rr(cx: Float, cy: Float, ax: Float, ay: Float, ol: Float, hl: Float, hw: Float, c: Float): List<FloatArray> {
+    val bx = -ay
+    val by = ax
+    val q = floatArrayOf(hl, hw - c, hl - c, hw, -hl + c, hw, -hl, hw - c, -hl, -hw + c, -hl + c, -hw, hl - c, -hw, hl, -hw + c)
+    return List(8) { i ->
+        val l = q[i * 2] + ol
+        val wv = q[i * 2 + 1]
+        floatArrayOf(cx + ax * l + bx * wv, cy + ay * l + by * wv)
+    }
+}
+
+private fun shadeCol(col: Color, nx: Float, ny: Float): Color {
+    val d = nx * LX + ny * LY
+    return if (d > 0f) lerp(col, Color.White, 0.18f * d) else lerp(col, Color.Black, -0.3f * d)
+}
+
+// An arm, leg or leash: a round-ended stroke with an optional highlight down one side
+private fun DrawScope.limb(x0: Float, y0: Float, x1: Float, y1: Float, wd: Float, col: Color, hi: Color?) {
+    drawLine(col, Offset(x0, y0), Offset(x1, y1), wd, StrokeCap.Round)
+    if (hi != null) drawLine(hi, Offset(x0 - wd * 0.18f, y0), Offset(x1 - wd * 0.18f, y1), wd * 0.35f, StrokeCap.Round)
+}
+
+// A rounded, shaded pedestrian standing at px, py; k is pixels per world unit
+private fun DrawScope.person(px: Float, py: Float, k: Float, o: PedLook, t: Float, faceK: Float) {
+    val sw = sin(t * 6f + o.pid)
+    drawOval(Color(0x40283C5A), Offset(px - 0.42f * k, py - 0.13f * k), Size(0.84f * k, 0.26f * k))
+    val sh = py - 1.38f * k
+    // back arm
+    limb(px + 0.27f * k, sh, px + 0.27f * k + sin(sw * 0.4f) * 0.55f * k, sh + cos(sw * 0.4f) * 0.55f * k, 0.16f * k, lerp(o.shirt, Color.Black, 0.3f), null)
+    // legs and shoes
+    limb(px - 0.11f * k, py - 0.8f * k, px - 0.11f * k + sw * 0.12f * k, py - 0.12f * k, 0.2f * k, o.pants, lerp(o.pants, Color.White, 0.25f))
+    limb(px + 0.11f * k, py - 0.8f * k, px + 0.11f * k - sw * 0.12f * k, py - 0.12f * k, 0.2f * k, lerp(o.pants, Color.Black, 0.15f), null)
+    val shoe = Color(0xFF263238)
+    drawOval(shoe, Offset(px - 0.11f * k + sw * 0.12f * k - 0.1f * k, py - 0.15f * k), Size(0.3f * k, 0.16f * k))
+    drawOval(shoe, Offset(px + 0.11f * k - sw * 0.12f * k - 0.1f * k, py - 0.15f * k), Size(0.3f * k, 0.16f * k))
+    // shaded body
+    drawRoundRect(
+        Brush.horizontalGradient(
+            0f to lerp(o.shirt, Color.White, 0.35f), 0.45f to o.shirt, 1f to lerp(o.shirt, Color.Black, 0.3f),
+            startX = px - 0.32f * k, endX = px + 0.32f * k
+        ),
+        Offset(px - 0.32f * k, py - 1.52f * k), Size(0.64f * k, 0.8f * k), CornerRadius(0.2f * k, 0.2f * k)
+    )
+    if (o.bag) drawRoundRect(Color(0xFF6D4C41), Offset(px - 0.42f * k, py - 1.1f * k), Size(0.2f * k, 0.32f * k), CornerRadius(0.05f * k, 0.05f * k))
+    // front arm and hand
+    val hx = px - 0.27f * k + sin(sw * 0.4f) * 0.55f * k
+    val hy = sh + cos(sw * 0.4f) * 0.55f * k
+    limb(px - 0.27f * k, sh, hx, hy, 0.17f * k, o.shirt, lerp(o.shirt, Color.White, 0.35f))
+    drawCircle(
+        Brush.radialGradient(0f to lerp(o.skin, Color.White, 0.3f), 1f to o.skin, center = Offset(hx - 0.03f * k, hy - 0.03f * k), radius = 0.1f * k),
+        0.09f * k, Offset(hx, hy)
+    )
+    // neck, head and hair
+    drawRect(lerp(o.skin, Color.Black, 0.15f), Offset(px - 0.07f * k, py - 1.62f * k), Size(0.14f * k, 0.14f * k))
+    val hy2 = py - 1.84f * k
+    drawCircle(
+        Brush.radialGradient(
+            0f to lerp(o.skin, Color.White, 0.35f), 0.7f to o.skin, 1f to lerp(o.skin, Color.Black, 0.2f),
+            center = Offset(px - 0.08f * k, hy2 - 0.08f * k), radius = 0.26f * k
+        ),
+        0.24f * k, Offset(px, hy2)
+    )
+    val hairB = Brush.radialGradient(
+        0f to lerp(o.hair, Color.White, 0.3f), 1f to o.hair,
+        center = Offset(px - 0.08f * k, hy2 - 0.2f * k), radius = 0.3f * k
+    )
+    drawArc(hairB, 180f, 180f, true, Offset(px - 0.255f * k, hy2 - 0.28f * k), Size(0.51f * k, 0.44f * k))
+    if (o.long) drawRoundRect(hairB, Offset(px + 0.1f * k, hy2 - 0.08f * k), Size(0.17f * k, 0.36f * k), CornerRadius(0.08f * k, 0.08f * k))
+    if (o.cap) {
+        drawArc(o.capC, 180f, 180f, true, Offset(px - 0.26f * k, hy2 - 0.28f * k), Size(0.52f * k, 0.32f * k))
+        drawRect(o.capC, Offset(px - 0.36f * k, hy2 - 0.13f * k), Size(0.3f * k, 0.06f * k))
+    }
+    // eyes and cheeks when close enough to see
+    if (k > faceK) {
+        drawCircle(Color(0xFF212121), 0.03f * k, Offset(px - 0.08f * k, hy2 + 0.02f * k))
+        drawCircle(Color(0xFF212121), 0.03f * k, Offset(px + 0.08f * k, hy2 + 0.02f * k))
+        drawCircle(Color(0x59FF7878), 0.04f * k, Offset(px - 0.15f * k, hy2 + 0.09f * k))
+        drawCircle(Color(0x59FF7878), 0.04f * k, Offset(px + 0.15f * k, hy2 + 0.09f * k))
+    }
+    if (o.dog) {
+        val dx = px + 1.0f * k
+        val fur = Color(0xFF6D4C41)
+        limb(hx + 0.05f * k, hy + 0.02f * k, dx, py - 0.42f * k, 0.03f * k, Color(0xFFE53935), null)
+        drawRoundRect(
+            Brush.verticalGradient(listOf(Color(0xFFA1887F), fur), startY = py - 0.55f * k, endY = py),
+            Offset(dx - 0.05f * k, py - 0.5f * k), Size(0.55f * k, 0.28f * k), CornerRadius(0.13f * k, 0.13f * k)
+        )
+        limb(dx + 0.05f * k, py - 0.25f * k, dx + 0.05f * k, py - 0.04f * k, 0.08f * k, fur, null)
+        limb(dx + 0.42f * k, py - 0.25f * k, dx + 0.42f * k, py - 0.04f * k, 0.08f * k, fur, null)
+        drawCircle(Color(0xFF8D6E63), 0.15f * k, Offset(dx + 0.55f * k, py - 0.55f * k))
+        drawOval(Color(0xFF5D4037), Offset(dx + 0.42f * k, py - 0.7f * k), Size(0.1f * k, 0.2f * k))
+        drawCircle(Color(0xFF212121), 0.03f * k, Offset(dx + 0.68f * k, py - 0.55f * k))
+    }
+}
 private val glassBlue = Color(0xFF5C9BD6)
 
 // Small repeatable hash, 0 to 1, so the same spot always gets the same tree or window
@@ -362,6 +468,119 @@ private class Renderer(val ds: DrawScope, val cam: DriveCam) {
                 floatArrayOf(sx - ax * hl + bx * hw, sy - ay * hl + by * hw, 0.01f)
             ), col
         )
+    }
+
+    // A solid with outline pb at height z0 and outline pt at z1 (same number of
+    // corners): tapering pt gives rounded shoulders and sloped windshields
+    fun prism(pb: List<FloatArray>, pt: List<FloatArray>, z0: Float, z1: Float, col: Color, top: Color?) {
+        var gx = 0f
+        var gy = 0f
+        for (p in pb) {
+            gx += p[0]
+            gy += p[1]
+        }
+        gx /= pb.size
+        gy /= pb.size
+        for (i in pb.indices) {
+            val a = pb[i]
+            val b = pb[(i + 1) % pb.size]
+            val at = pt[i]
+            val bt = pt[(i + 1) % pt.size]
+            var nx = b[1] - a[1]
+            var ny = -(b[0] - a[0])
+            val l = hypot(nx, ny)
+            if (l < 0.0001f) continue
+            nx /= l
+            ny /= l
+            val mx = (a[0] + b[0]) / 2f
+            val my = (a[1] + b[1]) / 2f
+            if (nx * (mx - gx) + ny * (my - gy) < 0f) {
+                nx = -nx
+                ny = -ny
+            }
+            val vx = cam.px - (mx + (at[0] + bt[0]) / 2f) / 2f
+            val vy = cam.py - (my + (at[1] + bt[1]) / 2f) / 2f
+            if (nx * vx + ny * vy > 0f) {
+                poly(
+                    listOf(
+                        floatArrayOf(a[0], a[1], z0), floatArrayOf(b[0], b[1], z0),
+                        floatArrayOf(bt[0], bt[1], z1), floatArrayOf(at[0], at[1], z1)
+                    ), shadeCol(col, nx, ny)
+                )
+            }
+        }
+        if (top != null && z1 < CAM_H) poly(pt.map { floatArrayOf(it[0], it[1], z1) }, top)
+    }
+
+    // A round light with a shine, at a point in the world
+    fun lamp(x: Float, y: Float, z: Float, col: Color, rad: Float) {
+        val p = tc(x, y, z)
+        if (p[2] < NEAR) return
+        val s = pr(p)
+        val k = f / p[2]
+        ds.drawCircle(col, rad * k, s)
+        ds.drawCircle(Color(0xB3FFFFFF), rad * k * 0.35f, Offset(s.x - rad * k * 0.3f, s.y - rad * k * 0.3f))
+    }
+
+    // A tyre with a hubcap, squashed by how much of its side the driver sees
+    fun wheel(x: Float, y: Float, bx: Float, by: Float) {
+        bill(x, y) { sx, sy, k ->
+            val vx = cam.px - x
+            val vy = cam.py - y
+            val vl = max(0.01f, hypot(vx, vy))
+            val fct = max(0.28f, abs((vx * bx + vy * by) / vl))
+            val rw = 0.36f * k
+            drawOval(Color(0xFF1B1B1B), Offset(sx - rw * fct, sy - 2f * rw), Size(2f * rw * fct, 2f * rw))
+            drawOval(Color(0xFFB0BEC5), Offset(sx - rw * 0.5f * fct, sy - 1.5f * rw), Size(rw * fct, rw))
+            drawOval(Color(0xFFECEFF1), Offset(sx - rw * 0.28f * fct, sy - 1.28f * rw), Size(rw * 0.36f * fct, rw * 0.36f))
+        }
+    }
+
+    // A rounded car: 0 sedan, 1 hatchback, 2 taxi, 3 box truck
+    fun car(cx: Float, cy: Float, ax: Float, ay: Float, c: Color, type: Int) {
+        val bx = -ay
+        val by = ax
+        val camFront = (cam.px - cx) * ax + (cam.py - cy) * ay > 0f
+        val camLeft = (cam.px - cx) * bx + (cam.py - cy) * by > 0f
+        poly(rr(cx + 0.25f, cy + 0.25f, ax, ay, 0f, 2.5f, 1.15f, 0.6f).map { floatArrayOf(it[0], it[1], 0.01f) }, Color(0x471E2346))
+        val wl = arrayOf(floatArrayOf(1.35f, 1f), floatArrayOf(-1.35f, 1f), floatArrayOf(1.35f, -1f), floatArrayOf(-1.35f, -1f))
+        // far wheels behind the body, near wheels in front of it
+        for (wv in wl) if ((wv[1] > 0f) != camLeft) wheel(cx + ax * wv[0] + bx * wv[1] * 0.93f, cy + ay * wv[0] + by * wv[1] * 0.93f, bx, by)
+        fun pair(along: Float, across: Float, z: Float, col: Color, rad: Float) {
+            lamp(cx + ax * along + bx * across, cy + ay * along + by * across, z, col, rad)
+            lamp(cx + ax * along - bx * across, cy + ay * along - by * across, z, col, rad)
+        }
+        if (type == 3) {
+            fun cab() {
+                prism(rr(cx, cy, ax, ay, 1.5f, 0.95f, 1.0f, 0.35f), rr(cx, cy, ax, ay, 1.45f, 0.9f, 0.95f, 0.3f), 0.3f, 1.2f, c, null)
+                prism(rr(cx, cy, ax, ay, 1.45f, 0.9f, 0.95f, 0.3f), rr(cx, cy, ax, ay, 1.3f, 0.7f, 0.85f, 0.25f), 1.2f, 2.0f, carGlass, null)
+                prism(rr(cx, cy, ax, ay, 1.3f, 0.7f, 0.85f, 0.25f), rr(cx, cy, ax, ay, 1.3f, 0.62f, 0.78f, 0.22f), 2.0f, 2.12f, c, lerp(c, Color.White, 0.2f))
+                if (camFront) pair(2.43f, 0.65f, 0.75f, Color(0xFFFFF59D), 0.14f)
+            }
+            fun cargo() {
+                prism(rr(cx, cy, ax, ay, -0.8f, 1.65f, 1.1f, 0.2f), rr(cx, cy, ax, ay, -0.8f, 1.65f, 1.1f, 0.2f), 0.4f, 2.8f, Color(0xFFECEFF1), Color(0xFFF5F5F5))
+                if (!camFront) pair(-2.47f, 0.85f, 0.6f, Color(0xFFFF1744), 0.12f)
+            }
+            if (camFront) {
+                cargo()
+                cab()
+            } else {
+                cab()
+                cargo()
+            }
+        } else {
+            // bumper, lower body, rounded shoulder, glass cabin, roof
+            prism(rr(cx, cy, ax, ay, 0f, 2.3f, 0.92f, 0.5f), rr(cx, cy, ax, ay, 0f, 2.3f, 0.92f, 0.5f), 0.28f, 0.45f, Color(0xFF455A64), null)
+            prism(rr(cx, cy, ax, ay, 0f, 2.2f, 0.97f, 0.55f), rr(cx, cy, ax, ay, 0f, 2.2f, 0.97f, 0.55f), 0.4f, 0.78f, c, null)
+            prism(rr(cx, cy, ax, ay, 0f, 2.2f, 0.97f, 0.55f), rr(cx, cy, ax, ay, -0.05f, 2.0f, 0.85f, 0.5f), 0.78f, 1.0f, c, lerp(c, Color.White, 0.15f))
+            val cb = if (type == 1) floatArrayOf(-0.45f, 1.4f, 0.8f, -0.55f, 1.05f, 0.62f) else floatArrayOf(-0.25f, 1.2f, 0.82f, -0.35f, 0.75f, 0.62f)
+            prism(rr(cx, cy, ax, ay, cb[0], cb[1], cb[2], 0.35f), rr(cx, cy, ax, ay, cb[3], cb[4], cb[5], 0.3f), 1.0f, 1.62f, carGlass, null)
+            prism(rr(cx, cy, ax, ay, cb[3], cb[4], cb[5], 0.3f), rr(cx, cy, ax, ay, cb[3], cb[4] - 0.08f, cb[5] - 0.06f, 0.28f), 1.62f, 1.7f, c, lerp(c, Color.White, 0.25f))
+            if (type == 2) prism(rr(cx, cy, ax, ay, cb[3], 0.3f, 0.3f, 0.08f), rr(cx, cy, ax, ay, cb[3], 0.26f, 0.26f, 0.06f), 1.7f, 1.95f, Color.White, Color(0xFFFFEB3B))
+            if (camFront) pair(2.21f, 0.6f, 0.66f, Color(0xFFFFF9C4), 0.15f)
+            else pair(-2.21f, 0.65f, 0.68f, Color(0xFFFF1744), 0.13f)
+        }
+        for (wv in wl) if ((wv[1] > 0f) == camLeft) wheel(cx + ax * wv[0] + bx * wv[1] * 0.93f, cy + ay * wv[0] + by * wv[1] * 0.93f, bx, by)
     }
 
     // Something flat that always faces the driver: gives screen x, y of its base and pixels per world unit
@@ -902,50 +1121,10 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
                     val cy = (if (horiz) across else u) + ry * ln
                     val dd = hypot(cx - cam.px, cy - cam.py)
                     if (dd > 200f || dd < 3f) continue
-                    val c = carCols[id % carCols.size]
-                    val sideC = lerp(c, Color.Black, 0.25f)
-                    val truck = id % 5 == 4
-                    val roof = if (id % 5 == 2) Color(0xFF212121) else c
-                    objs.add(Obj(dd) {
-                        r.shadow(cx - 1.2f, cy - 1.2f, ax, ay, 2.5f, 1.2f, Color(0x40232846))
-                        // wheels
-                        for (wx in floatArrayOf(1.4f, -1.4f)) for (wy in floatArrayOf(1f, -1f)) {
-                            r.box(cx + ax * wx + rx * wy * 0.9f, cy + ay * wx + ry * wy * 0.9f, ax, ay, 0.38f, 0.14f, 0f, 0.7f, Color(0xFF212121), Color(0xFF111111), null)
-                        }
-                        if (truck) {
-                            // box truck: cab in front, white box behind, far part first
-                            val camAhead = (cam.px - cx) * ax + (cam.py - cy) * ay > 0f
-                            val cab = {
-                                r.box(cx + ax * 1.6f, cy + ay * 1.6f, ax, ay, 0.9f, 1.0f, 0.3f, 1.9f, c, sideC, c) { a, b ->
-                                    r.quad(a, b, 0.1f, 0.9f, 1.1f, 1.75f, Color(0xFF263238), 0.02f)
-                                }
-                            }
-                            val cargo = {
-                                r.box(cx - ax * 0.8f, cy - ay * 0.8f, ax, ay, 1.6f, 1.1f, 0.4f, 2.8f, Color(0xFFECEFF1), Color(0xFFCFD8DC), Color(0xFFF5F5F5))
-                            }
-                            if (camAhead) { cargo(); cab() } else { cab(); cargo() }
-                        } else {
-                            r.box(cx, cy, ax, ay, 2.2f, 0.95f, 0.3f, 1.1f, c, sideC, c) { a, b ->
-                                val fwd = faces(a, b, cx, cy, ax, ay)
-                                when {
-                                    fwd > 1f -> {
-                                        r.quad(a, b, 0.08f, 0.28f, 0.75f, 0.95f, Color(0xFFFFF9C4), 0.02f)
-                                        r.quad(a, b, 0.72f, 0.92f, 0.75f, 0.95f, Color(0xFFFFF9C4), 0.02f)
-                                        r.quad(a, b, 0.3f, 0.7f, 0.45f, 0.6f, Color(0xFF455A64), 0.02f)
-                                    }
-                                    fwd < -1f -> {
-                                        r.quad(a, b, 0.06f, 0.24f, 0.72f, 0.92f, Color(0xFFFF1744), 0.02f)
-                                        r.quad(a, b, 0.76f, 0.94f, 0.72f, 0.92f, Color(0xFFFF1744), 0.02f)
-                                        r.quad(a, b, 0.38f, 0.62f, 0.5f, 0.66f, Color.White, 0.02f)
-                                    }
-                                    else -> r.quad(a, b, 0.49f, 0.51f, 0.35f, 1.05f, lerp(sideC, Color.Black, 0.3f), 0.01f)
-                                }
-                            }
-                            r.box(cx - ax * 0.3f, cy - ay * 0.3f, ax, ay, 1.2f, 0.85f, 1.1f, 1.75f, Color(0xFF37474F), Color(0xFF263238), roof) { a, b ->
-                                r.quad(a, b, 0.47f, 0.53f, 1.1f, 1.75f, c, 0.01f)
-                            }
-                        }
-                    })
+                    // 0 sedan, 1 hatchback, 2 taxi, 3 box truck
+                    val type = if (id % 5 == 4) 3 else if (id % 5 == 1) 1 else if (id % 7 == 3) 2 else 0
+                    val c = if (type == 2) Color(0xFFFFC107) else carCols[id % carCols.size]
+                    objs.add(Obj(dd) { r.car(cx, cy, ax, ay, c, type) })
                 }
             }
         }
@@ -953,6 +1132,7 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
     for (j in 0..n) streetCars(true, j, city.owH[j])
     for (i in 0..n) streetCars(false, i, city.owV[i])
     // pedestrians on the sidewalks
+    val faceK = w * 0.036f
     var pid = 0
     fun streetPeds(horiz: Boolean, idx: Int) {
         for (sd in floatArrayOf(-8.5f, 8.5f)) for (k in 0..4) {
@@ -966,45 +1146,13 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
             val y = if (horiz) idx * BL + sd else u
             val dd = hypot(x - cam.px, y - cam.py)
             if (dd > 120f) continue
-            val c = pedCols[pid % pedCols.size]
-            val sleeve = lerp(c, Color.Black, 0.2f)
-            val skin = skinCols[pid % skinCols.size]
-            val hair = hairCols[pid % hairCols.size]
-            val pants = pantsCols[pid % pantsCols.size]
+            val look = PedLook(
+                pid, pedCols[pid % pedCols.size], skinCols[pid % skinCols.size], hairCols[pid % hairCols.size],
+                pantsCols[pid % pantsCols.size], pid % 6 == 2, pid % 9 == 4, pid % 4 == 1, pid % 5 == 3, capCols[pid % 3]
+            )
             val kid = pid % 7 == 3
-            val bag = pid % 6 == 2
-            val dog = pid % 9 == 4
-            val sw = sin(t * 6f + pid)
             objs.add(Obj(dd) {
-                r.bill(x, y) { px, py, k2 ->
-                    val k = if (kid) k2 * 0.7f else k2
-                    drawOval(Color(0x33283C5A), Offset(px - 0.4f * k, py - 0.12f * k), Size(0.8f * k, 0.24f * k))
-                    // shoes and legs
-                    drawRect(Color(0xFF212121), Offset(px - 0.24f * k + sw * 0.06f * k, py - 0.08f * k), Size(0.22f * k, 0.08f * k))
-                    drawRect(Color(0xFF212121), Offset(px + 0.03f * k - sw * 0.06f * k, py - 0.08f * k), Size(0.22f * k, 0.08f * k))
-                    drawRect(pants, Offset(px - 0.22f * k + sw * 0.05f * k, py - 0.85f * k), Size(0.18f * k, 0.8f * k))
-                    drawRect(pants, Offset(px + 0.04f * k - sw * 0.05f * k, py - 0.85f * k), Size(0.18f * k, 0.8f * k))
-                    // swinging arms with hands
-                    for (side in intArrayOf(-1, 1)) {
-                        val a = side * sw * 0.35f
-                        val sh = Offset(px + side * 0.3f * k, py - 1.42f * k)
-                        val hand = Offset(sh.x - sin(a) * 0.6f * k, sh.y + cos(a) * 0.6f * k)
-                        drawLine(sleeve, sh, hand, 0.12f * k, StrokeCap.Round)
-                        drawCircle(skin, 0.07f * k, hand)
-                    }
-                    drawRoundRect(c, Offset(px - 0.3f * k, py - 1.5f * k), Size(0.6f * k, 0.72f * k), CornerRadius(0.15f * k, 0.15f * k))
-                    // head and hair
-                    drawCircle(skin, 0.2f * k, Offset(px, py - 1.7f * k))
-                    drawArc(hair, 180f, 180f, true, Offset(px - 0.2f * k, py - 1.94f * k), Size(0.4f * k, 0.4f * k))
-                    if (bag) drawRect(Color(0xFF795548), Offset(px + 0.3f * k, py - 0.95f * k), Size(0.28f * k, 0.3f * k))
-                    if (dog) {
-                        drawLine(Color(0xFFE53935), Offset(px + 0.36f * k, py - 0.85f * k), Offset(px + 1.0f * k, py - 0.3f * k), 0.04f * k)
-                        drawOval(Color(0xFF8D6E63), Offset(px + 0.87f * k, py - 0.41f * k), Size(0.56f * k, 0.32f * k))
-                        drawCircle(Color(0xFF8D6E63), 0.12f * k, Offset(px + 1.4f * k, py - 0.38f * k))
-                        drawRect(Color(0xFF8D6E63), Offset(px + 0.92f * k, py - 0.15f * k), Size(0.05f * k, 0.15f * k))
-                        drawRect(Color(0xFF8D6E63), Offset(px + 1.3f * k, py - 0.15f * k), Size(0.05f * k, 0.15f * k))
-                    }
-                }
+                r.bill(x, y) { px, py, k2 -> person(px, py, if (kid) k2 * 0.72f else k2, look, t, faceK) }
             })
         }
     }
