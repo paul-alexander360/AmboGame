@@ -128,8 +128,8 @@ fun HomeScreen(version: String, player: PlayerData) {
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
     if (screen == 1) {
-        ExamScreen {
-            rs.startHospital()
+        ExamScreen(rs.patient, rs.level) {
+            rs.examDone()
             screen = 0
         }
         return
