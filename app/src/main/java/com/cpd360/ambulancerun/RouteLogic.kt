@@ -18,10 +18,18 @@ fun rating(user: Double, fast: Double): Int {
     return if (r <= 1.05) 0 else if (r <= 1.25) 1 else if (r <= 1.6) 2 else 3
 }
 
-class RouteState {
+fun creditFor(grade: Int): Int = when (grade) {
+    0 -> 50
+    1 -> 35
+    2 -> 20
+    else -> 10
+}
+
+class RouteState(val player: PlayerData) {
     var level by mutableIntStateOf(1)
     var idx by mutableIntStateOf(0)
-    var city by mutableStateOf(CityData(1, 0, Random.nextLong()))
+    var run by mutableIntStateOf(1)
+    var city by mutableStateOf(makeCity(1, 0))
     var version by mutableIntStateOf(0)
     var stage by mutableIntStateOf(0)
     val path = mutableStateListOf<Int>()
@@ -29,16 +37,26 @@ class RouteState {
     var started by mutableStateOf(false)
     var leg1User by mutableStateOf(0.0)
     var leg1Fast by mutableStateOf(0.0)
+    var leg1Grade by mutableIntStateOf(0)
     var reached by mutableStateOf<Hospital?>(null)
     val needLevel = 4
     var popup by mutableStateOf<Hospital?>(null)
-
-    fun showHospital(h: Hospital) {
-        popup = h
-    }
+    var accSeg by mutableIntStateOf(-1)
+    var accType by mutableStateOf("")
+    var runOver by mutableStateOf(false)
+    var failReason by mutableStateOf("")
+    var earned by mutableIntStateOf(0)
+    private var awarded = false
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
     private var hospCycle = -1
+
+    private fun makeCity(l: Int, i: Int): CityData {
+        val c = CityData(l, i, Random.nextLong())
+        c.drv = player.drive
+        c.heavy = player.heavyBonus
+        return c
+    }
 
     private fun focus(x: Float, y: Float) {
         focusPt = Offset(x, y)
@@ -58,6 +76,10 @@ class RouteState {
         if (hs.isEmpty()) return
         hospCycle = (hospCycle + 1) % hs.size
         focus(city.slotX(hs[hospCycle].slot), city.slotY(hs[hospCycle].slot))
+    }
+
+    fun showHospital(h: Hospital) {
+        popup = h
     }
 
     fun startSlot(): Slot = if (stage == 0) city.station else city.call
@@ -94,7 +116,8 @@ class RouteState {
     fun load(l: Int, i: Int) {
         level = l
         idx = i
-        city = CityData(l, i, Random.nextLong())
+        run = 1
+        city = makeCity(l, i)
         hospCycle = -1
         resetRun()
         version++
@@ -107,14 +130,21 @@ class RouteState {
         done = false
         started = false
         reached = null
+        accSeg = -1
+        accType = ""
+        runOver = false
+        failReason = ""
+        earned = 0
+        awarded = false
     }
 
     fun reset() {
         resetRun()
+        awarded = true
         version++
     }
 
-    fun nextCity() {
+    private fun advanceCity() {
         var l = level
         var i = idx + 1
         if (i > 4) {
@@ -125,13 +155,26 @@ class RouteState {
         load(l, i)
     }
 
+    fun nextCity() {
+        advanceCity()
+    }
+
+    fun nextRun() {
+        run++
+        if (run > 5) {
+            advanceCity()
+        } else {
+            city.newCall()
+            resetRun()
+            version++
+        }
+    }
+
     fun begin() {
         if (!done) started = true
     }
 
     fun startHospital() {
-        leg1User = city.pathTime(path.toList())
-        leg1Fast = fastest()
         stage = 1
         path.clear()
         done = false
@@ -140,9 +183,63 @@ class RouteState {
         version++
     }
 
+    private fun award(c: Int) {
+        if (awarded) return
+        awarded = true
+        earned = c
+        player.credits += c
+        player.totalXp += c
+        player.save()
+    }
+
+    private fun finalizeLeg() {
+        val user = city.pathTime(path.toList())
+        val fast = fastest()
+        accSeg = -1
+        accType = ""
+        loop@ for (k in 1 until path.size) {
+            val a = path[k - 1]
+            val b = path[k]
+            for (type in 0..1) {
+                val ped = type == 0
+                val x = city.segRisk(a, b, ped)
+                val s = 0.1 * (if (ped) player.pedBonus else player.mvcBonus)
+                val chance = city.accidentChance(x, player.ambAvoid, s, player.avoidance)
+                if (Random.nextDouble() < chance && Random.nextDouble() >= player.dodge) {
+                    accSeg = k
+                    accType = if (ped) "pedestrian" else "car crash"
+                    break@loop
+                }
+            }
+        }
+        val grade = rating(user, fast)
+        if (stage == 0) {
+            leg1User = user
+            leg1Fast = fast
+            leg1Grade = grade
+        }
+        var fail = ""
+        if (accSeg >= 0) fail = "Accident with a " + accType
+        else if (wrongHospital()) fail = "Wrong hospital"
+        else if (user > fast * 1.6) fail = "Too slow"
+        if (fail != "") {
+            runOver = true
+            failReason = fail
+            award(0)
+            return
+        }
+        if (stage == 1) {
+            runOver = true
+            award(creditFor(leg1Grade) + creditFor(grade))
+        }
+    }
+
     private fun arrive(n: Int) {
         if (stage == 0) {
-            if (goals().contains(n)) done = true
+            if (goals().contains(n)) {
+                done = true
+                finalizeLeg()
+            }
             return
         }
         var found: Hospital? = null
@@ -154,6 +251,7 @@ class RouteState {
         if (found != null) {
             reached = found
             done = true
+            finalizeLeg()
         }
     }
 
