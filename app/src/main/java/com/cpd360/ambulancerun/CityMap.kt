@@ -287,6 +287,25 @@ private fun DrawScope.light(x: Float, y: Float) {
 }
 
 
+private fun DrawScope.starOfLife(cx: Float, cy: Float, r: Float) {
+    val blue = Color(0xFF0A72B8)
+    val bw = r * 0.51f
+    for (a in floatArrayOf(0f, 60f, 120f)) {
+        rotate(a, Offset(cx, cy)) {
+            drawRect(blue, Offset(cx - bw / 2f, cy - r), Size(bw, 2f * r))
+        }
+    }
+    drawRoundRect(
+        Color.White, Offset(cx - r * 0.07f, cy - r * 0.85f), Size(r * 0.14f, r * 1.7f),
+        CornerRadius(r * 0.07f, r * 0.07f)
+    )
+    val sn = Path()
+    sn.moveTo(cx - r * 0.2f, cy - r * 0.6f)
+    sn.cubicTo(cx + r * 0.4f, cy - r * 0.5f, cx + r * 0.4f, cy - r * 0.1f, cx, cy - r * 0.05f)
+    sn.cubicTo(cx - r * 0.4f, cy, cx - r * 0.4f, cy + r * 0.4f, cx + r * 0.2f, cy + r * 0.5f)
+    drawPath(sn, Color.White, style = Stroke(r * 0.12f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
 private fun DrawScope.station(cx: Float, cy: Float) = translate(cx, cy) {
     scale(0.55f, Offset.Zero) {
         drawOval(Color.Black, Offset(-18f, 14f), Size(36f, 8f), alpha = 0.15f)
@@ -294,12 +313,8 @@ private fun DrawScope.station(cx: Float, cy: Float) = translate(cx, cy) {
         box(Color(0xFFE53935), -17f, -17f, 34f, 34f, 6f)
         box(Color.White, -17f, -17f, 34f, 7f, 3f, 0.3f)
         box(Color(0xFFB0BEC5), -9f, 8f, 18f, 9f, 2f)
-        drawCircle(Color.White, 10f, Offset(0f, -2f))
-        for (a in floatArrayOf(0f, 60f, 120f)) {
-            rotate(a, Offset(0f, -2f)) {
-                drawLine(Color(0xFF1E6FE0), Offset(-8f, -2f), Offset(8f, -2f), 3f, StrokeCap.Round)
-            }
-        }
+        drawCircle(Color.White, 11.5f, Offset(0f, -2f))
+        starOfLife(0f, -2f, 9.5f)
     }
 }
 
