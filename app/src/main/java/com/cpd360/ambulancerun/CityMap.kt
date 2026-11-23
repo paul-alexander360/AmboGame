@@ -449,55 +449,92 @@ private fun DrawScope.glow(cx: Float, cy: Float, p: Float, k: Float) {
     box(blue, cx - 11f, cy - 12f, 22f, 24f, 6f, 0.05f + 0.3f * k)
 }
 
+private val OutC = Color(0xFF111111)
+
+private fun DrawScope.polyO(c: Color, vararg p: Float) {
+    val path = Path()
+    path.moveTo(p[0], p[1])
+    var i = 2
+    while (i < p.size) {
+        path.lineTo(p[i], p[i + 1])
+        i += 2
+    }
+    path.close()
+    drawPath(path, c)
+    drawPath(path, OutC, style = Stroke(0.5f, join = StrokeJoin.Round))
+}
+
+private fun DrawScope.boxO(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float) {
+    drawRoundRect(c, Offset(x, y), Size(w, h), CornerRadius(r, r))
+    drawRoundRect(OutC, Offset(x, y), Size(w, h), CornerRadius(r, r), style = Stroke(0.5f))
+}
+
+private fun DrawScope.circO(c: Color, r: Float, x: Float, y: Float) {
+    drawCircle(c, r, Offset(x, y))
+    drawCircle(OutC, r, Offset(x, y), style = Stroke(0.5f))
+}
+
 private fun DrawScope.ambSide(x: Float, y: Float, flip: Boolean) = translate(x, y) {
-    scale(if (flip) -0.6f else 0.6f, 0.6f, Offset.Zero) {
-        val red = Color(0xFFE53935)
-        val top = Color(0xFFEF5350)
-        val dark = Color(0xFFB71C1C)
-        drawOval(Color.Black, Offset(-24f, 8f), Size(52f, 9f), alpha = 0.2f)
-        poly(red, 1f, -22f, -8f, 6f, -8f, 6f, 6f, -22f, 6f)
-        poly(top, 1f, -22f, -8f, 6f, -8f, 11f, -14f, -17f, -14f)
-        poly(dark, 1f, 6f, -8f, 11f, -14f, 11f, 0f, 6f, 6f)
-        poly(Color.White, 0.8f, -22f, 3f, 6f, 3f, 6f, 5f, -22f, 5f)
-        poly(red, 1f, 6f, -3f, 16f, -3f, 22f, 1f, 22f, 6f, 6f, 6f)
-        poly(top, 1f, 6f, -3f, 16f, -3f, 19f, -6f, 9f, -6f)
-        poly(Color(0xFFBDE7FF), 1f, 8f, -2f, 15f, -2f, 19f, 1f, 8f, 1f)
-        poly(dark, 1f, 22f, 1f, 24f, -1f, 24f, 6f, 22f, 6f)
-        drawCircle(Color(0xFF263238), 5f, Offset(-12f, 7f))
-        drawCircle(Color(0xFFB0BEC5), 2.2f, Offset(-12f, 7f))
-        drawCircle(Color(0xFF263238), 5f, Offset(14f, 7f))
-        drawCircle(Color(0xFFB0BEC5), 2.2f, Offset(14f, 7f))
-        box(Color.White, -12f, -2.5f, 8f, 3f, 0.5f)
-        box(Color.White, -9.5f, -5.5f, 3f, 9f, 0.5f)
-        box(Color.White, -11.5f, -11f, 6f, 3f, 1f)
-        box(Color(0xFFFF1744), -10.8f, -10.5f, 4.6f, 2f, 0.8f)
-        box(Color.White, -8.5f, -14f, 6f, 3f, 1f)
-        box(Color(0xFFFF1744), -7.8f, -13.5f, 4.6f, 2f, 0.8f)
-        drawCircle(Color(0xFFFFEB3B), 1.5f, Offset(23f, 2f))
+    scale(if (flip) -0.55f else 0.55f, 0.55f, Offset.Zero) {
+        translate(-26f, -13f) {
+            val red = Color(0xFFE81010)
+            val top = Color(0xFFF25555)
+            val dark = Color(0xFFB00C0C)
+            val grey = Color(0xFFD0D0D0)
+            val tyre = Color(0xFF3B3838)
+            drawOval(Color.Black, Offset(3f, 23.8f), Size(46f, 4.2f), alpha = 0.18f)
+            polyO(grey, 0.4f, 19f, 2.4f, 19f, 2.4f, 20.2f, 6.4f, 20.2f, 6.4f, 21.8f, 0.4f, 21.8f)
+            polyO(top, 1.2f, 1.6f, 34.7f, 1.6f, 37.7f, -2.2f, 4.2f, -2.2f)
+            boxO(red, 1.2f, 1.6f, 33.5f, 19.8f, 1.6f)
+            polyO(dark, 34.7f, 1.6f, 37.7f, -2.2f, 37.7f, 3.1f, 34.7f, 6.7f)
+            polyO(top, 34.7f, 6.7f, 39.2f, 6.8f, 42.2f, 3.1f, 37.7f, 3.1f)
+            polyO(red, 34.7f, 6.7f, 39.2f, 6.8f, 40.4f, 7.5f, 44.7f, 12.1f, 48.5f, 13f, 50.9f, 14f, 51.6f, 15.4f, 51.4f, 21.3f, 34.7f, 21.3f)
+            polyO(Color(0xFF7FD3FF), 35.7f, 8.1f, 39.3f, 8.1f, 43.1f, 12.2f, 43.1f, 13.2f, 35.7f, 13.2f)
+            poly(Color.White, 0.5f, 36f, 12.9f, 37f, 12.9f, 39.9f, 8.6f, 39f, 8.6f)
+            boxO(Color(0xFF3A3A3A), 40.9f, 11f, 1.9f, 3f, 0.6f)
+            boxO(Color(0xFF3A3A3A), 35.4f, 14.4f, 2f, 1.1f, 0.4f)
+            boxO(Color.White, 49.4f, 14.6f, 2.1f, 2.8f, 0.5f)
+            box(Color(0xFFFFC94D), 49.5f, 14.7f, 1f, 2.6f, 0.3f)
+            boxO(grey, 49.1f, 18.2f, 2.8f, 3.1f, 0.6f)
+            for (cx in floatArrayOf(11.1f, 44.7f)) {
+                drawArc(tyre, 180f, 180f, true, Offset(cx - 5f, 16.6f), Size(10f, 10f))
+                drawArc(OutC, 180f, 180f, false, Offset(cx - 5f, 16.6f), Size(10f, 10f), style = Stroke(0.5f))
+                circO(Color(0xFF413C3C), 4.1f, cx, 21.6f)
+                circO(grey, 2.1f, cx, 21.6f)
+                circO(Color(0xFFBDBDBD), 0.9f, cx, 21.6f)
+            }
+            box(Color.White, 15.4f, 6f, 3.4f, 9.1f, 0.3f)
+            box(Color.White, 12.2f, 9f, 9.9f, 3.1f, 0.3f)
+            boxO(Color(0xFFFF2A2A), 2.3f, 2.7f, 3.3f, 2.5f, 0.6f)
+            boxO(Color(0xFFF5F5F5), 6.1f, 2.7f, 3.3f, 2.5f, 0.6f)
+            boxO(Color(0xFFF5F5F5), 26.4f, 2.7f, 3.3f, 2.5f, 0.6f)
+            boxO(Color(0xFFFF2A2A), 30.2f, 2.7f, 3.4f, 2.5f, 0.6f)
+            boxO(Color(0xFFFF1744), 18.5f, 0.1f, 3f, 1.3f, 0.4f)
+            boxO(Color(0xFFFF1744), 20.4f, -1.9f, 3f, 1.3f, 0.4f)
+        }
     }
 }
 
 private fun DrawScope.ambFront(x: Float, y: Float) = translate(x, y) {
-    scale(0.6f, Offset.Zero) {
-        val red = Color(0xFFE53935)
-        drawOval(Color.Black, Offset(-14f, 9f), Size(28f, 7f), alpha = 0.2f)
-        box(Color(0xFF263238), -15f, 5f, 4f, 9f, 1.5f)
-        box(Color(0xFF263238), 11f, 5f, 4f, 9f, 1.5f)
-        drawCircle(Color(0xFFB0BEC5), 1.3f, Offset(-15.2f, 9.5f))
-        drawCircle(Color(0xFFB0BEC5), 1.3f, Offset(15.2f, 9.5f))
-        poly(Color(0xFFEF5350), 1f, -10f, -17f, 10f, -17f, 12f, -12f, -12f, -12f)
-        poly(red, 1f, -12f, -12f, 12f, -12f, 12f, -1f, -12f, -1f)
-        poly(Color.White, 0.8f, -12f, -6f, 12f, -6f, 12f, -4f, -12f, -4f)
-        poly(Color(0xFFBDE7FF), 1f, -9f, 0f, 9f, 0f, 10f, 5f, -10f, 5f)
-        poly(red, 1f, -11f, 5f, 11f, 5f, 11f, 11f, -11f, 11f)
-        box(Color(0xFF37474F), -5f, 7f, 10f, 3f, 1f)
-        drawCircle(Color(0xFFFFEB3B), 1.8f, Offset(-8f, 8.5f))
-        drawCircle(Color(0xFFFFEB3B), 1.8f, Offset(8f, 8.5f))
-        box(Color(0xFFB0BEC5), -12f, 11f, 24f, 2.5f, 1f)
-        box(Color.White, -7f, -16.5f, 5f, 3f, 1f)
-        box(Color(0xFFFF1744), -6.5f, -16f, 4f, 2f, 0.8f)
-        box(Color.White, 2f, -16.5f, 5f, 3f, 1f)
-        box(Color(0xFFFF1744), 2.5f, -16f, 4f, 2f, 0.8f)
+    scale(0.55f, Offset.Zero) {
+        val red = Color(0xFFE81010)
+        val grey = Color(0xFFD0D0D0)
+        drawOval(Color.Black, Offset(-13f, 12f), Size(26f, 4.5f), alpha = 0.18f)
+        boxO(Color(0xFF413C3C), -14.5f, 6f, 3f, 9f, 1f)
+        boxO(Color(0xFF413C3C), 11.5f, 6f, 3f, 9f, 1f)
+        circO(grey, 0.9f, -13f, 10.5f)
+        circO(grey, 0.9f, 13f, 10.5f)
+        polyO(Color(0xFFF25555), -10f, -18f, 10f, -18f, 12f, -13f, -12f, -13f)
+        polyO(red, -12f, -13f, 12f, -13f, 12f, -1f, -12f, -1f)
+        polyO(Color(0xFF7FD3FF), -9f, 0f, 9f, 0f, 10f, 5f, -10f, 5f)
+        poly(Color.White, 0.5f, -6f, 4.6f, -4.6f, 4.6f, -1.8f, 0.4f, -3.2f, 0.4f)
+        polyO(red, -11f, 5f, 11f, 5f, 11f, 12f, -11f, 12f)
+        boxO(Color(0xFF37474F), -5f, 7.2f, 10f, 3f, 1f)
+        circO(Color(0xFFFFC94D), 1.9f, -8f, 8.6f)
+        circO(Color(0xFFFFC94D), 1.9f, 8f, 8.6f)
+        boxO(grey, -12f, 11.5f, 24f, 2.8f, 1f)
+        boxO(Color(0xFFFF1744), -6.5f, -17f, 4.5f, 2.4f, 0.8f)
+        boxO(Color(0xFFFF1744), 2f, -17f, 4.5f, 2.4f, 0.8f)
     }
 }
 
