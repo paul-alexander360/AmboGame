@@ -285,7 +285,7 @@ fun HomeScreen(version: String, player: PlayerData) {
                     }
                     if (rs.runOver) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Credits earned: +" + rs.earned, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("XP and credits earned: +" + rs.earned, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text("Level " + player.level + "   Credits " + player.credits, fontSize = 13.sp)
                         Spacer(Modifier.height(10.dp))
                         Box(
@@ -349,6 +349,9 @@ fun HomeScreen(version: String, player: PlayerData) {
                     }
                 }
             }
+        }
+        if (rs.runOver && rs.driveShown && rs.gTo >= 0) {
+            GradeCard(rs) { rs.nextRun() }
         }
     }
 }
