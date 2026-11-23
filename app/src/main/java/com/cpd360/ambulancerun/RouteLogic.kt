@@ -31,6 +31,11 @@ class RouteState {
     var leg1Fast by mutableStateOf(0.0)
     var reached by mutableStateOf<Hospital?>(null)
     val needLevel = 4
+    var popup by mutableStateOf<Hospital?>(null)
+
+    fun showHospital(h: Hospital) {
+        popup = h
+    }
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
     private var hospCycle = -1
@@ -96,6 +101,7 @@ class RouteState {
     }
 
     private fun resetRun() {
+        popup = null
         stage = 0
         path.clear()
         done = false
