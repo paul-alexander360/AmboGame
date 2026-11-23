@@ -31,8 +31,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
@@ -45,6 +51,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.tan
 
 // One city block in the drive scene, in world units
 private const val BL = 60f
@@ -189,6 +196,43 @@ private val carCols = listOf(
 private val pedCols = listOf(
     Color(0xFFE53935), Color(0xFF3949AB), Color(0xFF43A047), Color(0xFFFB8C00), Color(0xFF8E24AA), Color(0xFF00897B)
 )
+private val hairCols = listOf(Color(0xFF3E2723), Color(0xFF212121), Color(0xFF8D6E63), Color(0xFFFBC02D), Color(0xFF5D4037))
+private val skinCols = listOf(Color(0xFFF2C29B), Color(0xFFC68642), Color(0xFF8D5524), Color(0xFFE0AC69), Color(0xFFFFDBAC))
+private val pantsCols = listOf(Color(0xFF37474F), Color(0xFF1A237E), Color(0xFF5D4037), Color(0xFF263238))
+private val houseWalls = listOf(
+    Color(0xFFFFE0B2), Color(0xFFF5C98A), Color(0xFFC8F0D8), Color(0xFF9ED9B5),
+    Color(0xFFFFD1DC), Color(0xFFF2AFC0), Color(0xFFFFF3A6), Color(0xFFEED97A)
+)
+private val roofCols = listOf(Color(0xFFE2583E), Color(0xFF3F8EDC), Color(0xFF2BAF9A), Color(0xFF8E5BD0))
+private val awningCols = listOf(Color(0xFFE53935), Color(0xFF43A047), Color(0xFF1E88E5))
+private val treeCols = listOf(Color(0xFF43A047), Color(0xFF2E7D32), Color(0xFF66BB6A))
+private val shadowCol = Color(0x29283C5A)
+private val glassBlue = Color(0xFF5C9BD6)
+
+// Small repeatable hash, 0 to 1, so the same spot always gets the same tree or window
+private fun hsh(v: Int): Float {
+    var i = (v xor 61) xor (v ushr 16)
+    i += i shl 3
+    i = i xor (i ushr 4)
+    i *= 0x27d4eb2d
+    i = i xor (i ushr 15)
+    return (i.toLong() and 0xFFFFFFFFL).toFloat() / 4294967296f
+}
+
+private fun wrapAng(x: Float): Float {
+    var d = x
+    while (d > PI) d -= (2 * PI).toFloat()
+    while (d < -PI) d += (2 * PI).toFloat()
+    return d
+}
+
+// Text drawn on the canvas, measured once
+private class Labels(
+    val stop: TextLayoutResult,
+    val mph: TextLayoutResult,
+    val rpm: TextLayoutResult,
+    val buttons: List<TextLayoutResult>
+)
 
 // Draws the world from the driver seat
 private class Renderer(val ds: DrawScope, val cam: DriveCam) {
@@ -238,8 +282,43 @@ private class Renderer(val ds: DrawScope, val cam: DriveCam) {
         )
     }
 
-    // A box standing on the ground, ax/ay is its long direction
-    fun box(cx: Float, cy: Float, ax: Float, ay: Float, hl: Float, hw: Float, z0: Float, z1: Float, front: Color, side: Color, top: Color?) {
+    // A flat ring on the ground, like a manhole cover
+    fun disc(x: Float, y: Float, rad: Float, col: Color) {
+        val pts = ArrayList<FloatArray>()
+        for (k in 0 until 10) {
+            val a = k / 10f * 2f * PI.toFloat()
+            pts.add(floatArrayOf(x + rad * cos(a), y + rad * sin(a), 0.01f))
+        }
+        poly(pts, col)
+    }
+
+    // A panel on a wall from corner a to corner b: u0..u1 along the wall, z0..z1 up,
+    // pushed out from the wall by out
+    fun quad(a: FloatArray, b: FloatArray, u0: Float, u1: Float, z0: Float, z1: Float, col: Color, out: Float = 0.03f) {
+        val dx = b[0] - a[0]
+        val dy = b[1] - a[1]
+        val len = hypot(dx, dy)
+        if (len < 0.001f) return
+        val ox = -dy / len * out
+        val oy = dx / len * out
+        val x0 = a[0] + dx * u0 + ox
+        val yA = a[1] + dy * u0 + oy
+        val x1 = a[0] + dx * u1 + ox
+        val yB = a[1] + dy * u1 + oy
+        poly(
+            listOf(
+                floatArrayOf(x0, yA, z0), floatArrayOf(x1, yB, z0),
+                floatArrayOf(x1, yB, z1), floatArrayOf(x0, yA, z1)
+            ), col
+        )
+    }
+
+    // A box standing on the ground, ax/ay is its long direction.
+    // deco draws details on each wall the driver can see.
+    fun box(
+        cx: Float, cy: Float, ax: Float, ay: Float, hl: Float, hw: Float, z0: Float, z1: Float,
+        front: Color, side: Color, top: Color?, deco: ((FloatArray, FloatArray) -> Unit)? = null
+    ) {
         val bx = -ay
         val by = ax
         val c = listOf(
@@ -263,9 +342,26 @@ private class Renderer(val ds: DrawScope, val cam: DriveCam) {
                     ),
                     if (i % 2 == 1) side else front
                 )
+                if (deco != null) deco(a, b)
             }
         }
         if (top != null && z1 < CAM_H) poly(c.map { floatArrayOf(it[0], it[1], z1) }, top)
+    }
+
+    // A flat shadow on the ground under a box
+    fun shadow(cx: Float, cy: Float, ax: Float, ay: Float, hl: Float, hw: Float, col: Color) {
+        val bx = -ay
+        val by = ax
+        val sx = cx + 1.2f
+        val sy = cy + 1.2f
+        poly(
+            listOf(
+                floatArrayOf(sx + ax * hl + bx * hw, sy + ay * hl + by * hw, 0.01f),
+                floatArrayOf(sx + ax * hl - bx * hw, sy + ay * hl - by * hw, 0.01f),
+                floatArrayOf(sx - ax * hl - bx * hw, sy - ay * hl - by * hw, 0.01f),
+                floatArrayOf(sx - ax * hl + bx * hw, sy - ay * hl + by * hw, 0.01f)
+            ), col
+        )
     }
 
     // Something flat that always faces the driver: gives screen x, y of its base and pixels per world unit
@@ -277,22 +373,64 @@ private class Renderer(val ds: DrawScope, val cam: DriveCam) {
     }
 }
 
-private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destKey: Int, crashAt: FloatArray?, tr: Traffic) {
+// Which way a wall faces compared with a direction: > 0 means the wall faces that way
+private fun faces(a: FloatArray, b: FloatArray, cx: Float, cy: Float, dx: Float, dy: Float): Float =
+    ((a[0] + b[0]) / 2f - cx) * dx + ((a[1] + b[1]) / 2f - cy) * dy
+
+private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destKey: Int, crashAt: FloatArray?, tr: Traffic, lab: Labels) {
     val d = plan.distAt(t)
     val cam = plan.camAt(d)
     val r = Renderer(this, cam)
     val w = size.width
     val h = size.height
     val n = city.n
-    drawRect(Brush.verticalGradient(listOf(Color(0xFF7FD0FF), Color(0xFFCDEFFF)), endY = r.y0), size = Size(w, r.y0 + 1f))
+    val sc = w / 390f
+    // sky, clouds and a far-off skyline that turn with the ambulance
+    drawRect(Brush.verticalGradient(listOf(Color(0xFF6EC6FF), Color(0xFFD6F2FF)), endY = r.y0), size = Size(w, r.y0 + 1f))
+    val head = atan2(cam.hy, cam.hx)
+    for (i in 0 until 8) {
+        val da = wrapAng(i / 8f * 2f * PI.toFloat() - head)
+        if (abs(da) > 1f) continue
+        val cx = w / 2f + tan(da) * r.f
+        val cy = r.y0 * (0.3f + 0.25f * hsh(i))
+        val s = (40f + 30f * hsh(i + 9)) * sc
+        val puffs = arrayOf(floatArrayOf(0f, 0f, 1f), floatArrayOf(-0.8f, 0.25f, 0.7f), floatArrayOf(0.85f, 0.2f, 0.75f), floatArrayOf(0.35f, -0.35f, 0.7f))
+        for (q in puffs) {
+            drawOval(
+                Color(0xEBFFFFFF),
+                Offset(cx + q[0] * s - s * q[2], cy + q[1] * s - s * q[2] * 0.62f),
+                Size(2f * s * q[2], 2f * s * q[2] * 0.62f)
+            )
+        }
+    }
+    for (i in 0 until 60) {
+        val da = wrapAng(i / 60f * 2f * PI.toFloat() - head)
+        if (abs(da) > 1.1f) continue
+        val sx = w / 2f + tan(da) * r.f
+        val bw = (18f + 20f * hsh(i * 3)) * sc
+        val bh = (12f + 40f * hsh(i * 5)) * sc
+        drawRect(Color(0xFFA9C7E0), Offset(sx - bw / 2f, r.y0 - bh), Size(bw, bh + 1f))
+    }
     drawRect(Color(0xFF9BD468), Offset(0f, r.y0), Size(w, h - r.y0))
     r.ground(-9f, -9f, n * BL + 9f, n * BL + 9f, Color(0xFF7D82A8))
     fun near(x: Float, y: Float, lim: Float) = hypot(x - cam.px, y - cam.py) < lim
+    val seam = Color(0xFFC3C6D6)
     for (row in 0 until n) for (col in 0 until n) {
         val x0 = col * BL
         val yy = row * BL
         if (!near(x0 + BL / 2f, yy + BL / 2f, 260f)) continue
-        r.ground(x0 + 7f, yy + 7f, x0 + BL - 7f, yy + BL - 7f, Color(0xFFD9DBE8))
+        r.ground(x0 + 7f, yy + 7f, x0 + BL - 7f, yy + BL - 7f, Color(0xFFA9ACBE))
+        r.ground(x0 + 7.35f, yy + 7.35f, x0 + BL - 7.35f, yy + BL - 7.35f, Color(0xFFD9DBE8))
+        if (near(x0 + BL / 2f, yy + BL / 2f, 90f)) {
+            var s = 10f
+            while (s < BL - 10f) {
+                r.ground(x0 + s, yy + 7.35f, x0 + s + 0.12f, yy + 10f, seam)
+                r.ground(x0 + s, yy + BL - 10f, x0 + s + 0.12f, yy + BL - 7.35f, seam)
+                r.ground(x0 + 7.35f, yy + s, x0 + 10f, yy + s + 0.12f, seam)
+                r.ground(x0 + BL - 10f, yy + s, x0 + BL - 7.35f, yy + s + 0.12f, seam)
+                s += 3f
+            }
+        }
         val gc = lerp(zoneGround[city.zone[row * n + col]], Color(0xFF2B2B2B), 0.08f * city.dens[row * n + col])
         r.ground(x0 + 10f, yy + 10f, x0 + BL - 10f, yy + BL - 10f, gc)
     }
@@ -323,6 +461,26 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
         }
         s += 8f
     }
+    // edge lines and manhole covers
+    val edge = Color(0xFFE8E8EE)
+    val manhole = Color(0xFF5F6385)
+    for (j in 0..n) for (c in 0 until n) {
+        val y = j * BL
+        val x = c * BL
+        if (near(x + BL / 2f, y, 160f)) {
+            r.ground(x + 10f, y - 6.6f, x + BL - 10f, y - 6.4f, edge)
+            r.ground(x + 10f, y + 6.4f, x + BL - 10f, y + 6.6f, edge)
+            r.disc(x + 20f + 20f * hsh(j * 13 + c), y + (if (hsh(c * 7 + j) > 0.5f) 3.5f else -3.5f), 0.6f, manhole)
+        }
+        val vx = j * BL
+        val vy = c * BL
+        if (near(vx, vy + BL / 2f, 160f)) {
+            r.ground(vx - 6.6f, vy + 10f, vx - 6.4f, vy + BL - 10f, edge)
+            r.ground(vx + 6.4f, vy + 10f, vx + 6.6f, vy + BL - 10f, edge)
+            r.disc(vx + (if (hsh(c * 3 + j + 500) > 0.5f) 3.5f else -3.5f), vy + 20f + 20f * hsh(j * 11 + c + 500), 0.6f, manhole)
+        }
+    }
+    // crosswalks and stop bars
     val zebra = Color(0xFFF4F4F8)
     for (j in 0..n) for (i in 0..n) {
         val x = i * BL
@@ -336,6 +494,10 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
             r.ground(x + 7.5f, y + q - 0.5f, x + 10f, y + q + 0.5f, zebra)
             q += 2f
         }
+        r.ground(x - 11f, y + 0.3f, x - 10.5f, y + 7f, Color.White)
+        r.ground(x + 10.5f, y - 7f, x + 11f, y - 0.3f, Color.White)
+        r.ground(x - 7f, y - 11f, x - 0.3f, y - 10.5f, Color.White)
+        r.ground(x + 0.3f, y + 10.5f, x + 7f, y + 11f, Color.White)
     }
 
     val objs = ArrayList<Obj>()
@@ -354,23 +516,193 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
             if (dd > 220f) continue
             val key = (row * n + col) * 4 + e
             val hl = city.hospKey[key]
+            // 0 house, 1 office, 2 shop, 3 hospital, 4 station
+            var kind: Int
             var bh: Float
             var front: Color
             var side: Color
             when {
-                hl != null -> { bh = 12f + 2f * hl; front = Color(0xFFF4F4F8); side = Color(0xFFB8BDE6) }
-                key == stationKey -> { bh = 7f; front = Color(0xFFE53935); side = Color(0xFFB71C1C) }
-                z == 0 -> { bh = 5f + 2f * dn; front = Color(0xFFFFE0B2); side = Color(0xFFE6C690) }
-                z == 1 -> { bh = 12f + 9f * dn; front = Color(0xFF4FC3F7); side = Color(0xFF1E9BDB) }
-                else -> { bh = 8f + 2.5f * dn; front = Color(0xFFFFB74D); side = Color(0xFFF29A2E) }
+                hl != null -> { kind = 3; bh = 12f + 2f * hl; front = Color(0xFFF4F4F8); side = Color(0xFFB8BDE6) }
+                key == stationKey -> { kind = 4; bh = 7f; front = Color(0xFFE53935); side = Color(0xFFB71C1C) }
+                z == 0 -> { kind = 0; bh = 5f + 2f * dn; front = Color(0xFFFFE0B2); side = Color(0xFFE6C690) }
+                z == 1 -> { kind = 1; bh = 12f + 9f * dn; front = Color(0xFF4FC3F7); side = Color(0xFF1E9BDB) }
+                else -> { kind = 2; bh = 8f + 2.5f * dn; front = Color(0xFFFFB74D); side = Color(0xFFF29A2E) }
             }
             val ax = if (eys[e] != 0) 1f else 0f
             val ay = if (eys[e] != 0) 0f else 1f
+            // the road is on this side of the building
+            val rfx = exs[e].toFloat()
+            val rfy = eys[e].toFloat()
+            val detail = dd < 120f
             val isDest = key == destKey
-            val isHosp = hl != null
-            val topH = bh
+            val isHosp = kind == 3
+            val hh = 3.2f + 1.2f * dn
+            val topH = if (kind == 0) hh + 2.6f else bh
+            // shadows go down first, under everything
+            objs.add(Obj(dd + 400f) {
+                if (kind == 0) r.shadow(cx, cy, ax, ay, 14.5f, 6.5f, shadowCol)
+                else r.shadow(cx, cy, ax, ay, 16f, 8f, shadowCol)
+            })
             objs.add(Obj(dd) {
-                r.box(cx, cy, ax, ay, 15f, 7f, 0f, topH, front, side, null)
+                if (kind == 0) {
+                    // two homes per lot: pitched roof, chimney, door, garage and windows
+                    for (sd in intArrayOf(-1, 1)) {
+                        val hx = cx + ax * sd * 7.5f
+                        val hy = cy + ay * sd * 7.5f
+                        val pi = (key * 2 + (if (sd > 0) 1 else 0)) % 4
+                        val wallC = houseWalls[pi * 2]
+                        val sideC = houseWalls[pi * 2 + 1]
+                        r.box(hx, hy, ax, ay, 6.2f, 5.5f, 0f, hh, wallC, sideC, null) { a, b ->
+                            if (detail) {
+                                if (faces(a, b, hx, hy, rfx, rfy) > 0.5f) {
+                                    r.quad(a, b, 0.12f, 0.26f, 0f, 2.1f, Color(0xFF8D5524), 0.02f)
+                                    r.quad(a, b, 0.16f, 0.22f, 0.9f, 1.1f, Color(0xFFFFD54F))
+                                    r.quad(a, b, 0.4f, 0.58f, 1.1f, 2.1f, Color.White, 0.02f)
+                                    r.quad(a, b, 0.42f, 0.56f, 1.2f, 2.0f, glassBlue)
+                                    r.quad(a, b, 0.66f, 0.92f, 0f, 1.9f, Color(0xFFECEFF1), 0.02f)
+                                    for (k in 0..3) r.quad(a, b, 0.66f, 0.92f, 0.4f + k * 0.4f, 0.45f + k * 0.4f, Color(0xFFB0BEC5))
+                                    if (dn > 0) {
+                                        for (u in floatArrayOf(0.2f, 0.6f)) {
+                                            r.quad(a, b, u, u + 0.18f, 2.6f, 3.6f, Color.White, 0.02f)
+                                            r.quad(a, b, u + 0.02f, u + 0.16f, 2.7f, 3.5f, glassBlue)
+                                        }
+                                    }
+                                } else {
+                                    r.quad(a, b, 0.35f, 0.65f, 1.1f, 2.1f, glassBlue, 0.02f)
+                                }
+                            }
+                        }
+                        // roof: ridge along the long side, the slope facing away drawn first
+                        val roofC = roofCols[(key + (if (sd > 0) 1 else 0)) % 4]
+                        val roofD = lerp(roofC, Color.Black, 0.25f)
+                        val rh = hh + 2.6f
+                        val pbx = -ay
+                        val pby = ax
+                        val camSide = if ((cam.px - hx) * pbx + (cam.py - hy) * pby > 0f) 1f else -1f
+                        for (sg in floatArrayOf(-camSide, camSide)) {
+                            r.poly(
+                                listOf(
+                                    floatArrayOf(hx + ax * 6.6f + pbx * sg * 6.1f, hy + ay * 6.6f + pby * sg * 6.1f, hh - 0.2f),
+                                    floatArrayOf(hx - ax * 6.6f + pbx * sg * 6.1f, hy - ay * 6.6f + pby * sg * 6.1f, hh - 0.2f),
+                                    floatArrayOf(hx - ax * 6.6f, hy - ay * 6.6f, rh),
+                                    floatArrayOf(hx + ax * 6.6f, hy + ay * 6.6f, rh)
+                                ),
+                                if (sg == camSide) roofC else roofD
+                            )
+                        }
+                        for (end in floatArrayOf(1f, -1f)) {
+                            val ex = hx + ax * end * 6.2f
+                            val ey = hy + ay * end * 6.2f
+                            if ((ex - hx) * (cam.px - ex) + (ey - hy) * (cam.py - ey) > 0f) {
+                                r.poly(
+                                    listOf(
+                                        floatArrayOf(ex + pbx * 5.5f, ey + pby * 5.5f, hh),
+                                        floatArrayOf(ex - pbx * 5.5f, ey - pby * 5.5f, hh),
+                                        floatArrayOf(ex, ey, rh - 0.3f)
+                                    ), sideC
+                                )
+                            }
+                        }
+                        if (detail) r.box(hx + ax * 3f, hy + ay * 3f, ax, ay, 0.5f, 0.5f, hh, rh + 0.6f, Color(0xFF8D6E63), Color(0xFF6D4C41), null)
+                    }
+                    // white picket fence along the sidewalk, with a gap for the gate
+                    if (dd < 90f) {
+                        val fx = cx + rfx * 6.8f
+                        val fy = cy + rfy * 6.8f
+                        var q = -14f
+                        while (q <= 14f) {
+                            if (abs(q) >= 1.2f) {
+                                r.bill(fx + ax * q, fy + ay * q) { px, py, k ->
+                                    drawRect(Color.White, Offset(px - 0.12f * k, py - 0.9f * k), Size(0.24f * k, 0.9f * k))
+                                    drawRect(Color.White, Offset(px - 0.55f * k, py - 0.65f * k), Size(1.1f * k, 0.1f * k))
+                                }
+                            }
+                            q += 1.1f
+                        }
+                    }
+                } else {
+                    r.box(cx, cy, ax, ay, 15f, 7f, 0f, bh, front, side, null) { a, b ->
+                        if (detail) {
+                            val roadSide = faces(a, b, cx, cy, rfx, rfy) > 0.5f
+                            val len = hypot(b[0] - a[0], b[1] - a[1])
+                            when (kind) {
+                                1 -> {
+                                    // office: white floor bands with glass panes, lobby at street level
+                                    val floors = floor(bh / 3.2f).toInt()
+                                    val cols = max(2, floor(len / 3.4f).toInt())
+                                    for (k in 0 until floors) {
+                                        val z0 = 0.4f + k * 3.2f
+                                        if (k == 0 && roadSide) continue
+                                        r.quad(a, b, 0.02f, 0.98f, z0 + 0.5f, z0 + 2.5f, Color.White, 0.02f)
+                                        for (q in 0 until cols) {
+                                            r.quad(
+                                                a, b, (q + 0.15f) / cols, (q + 0.85f) / cols, z0 + 0.62f, z0 + 2.38f,
+                                                if ((q + k) % 3 == 0) Color(0xFFBBDEFB) else Color(0xFF2F7FC1)
+                                            )
+                                        }
+                                    }
+                                    if (roadSide) {
+                                        r.quad(a, b, 0.05f, 0.95f, 0.2f, 2.9f, Color(0xFFB3E5FC), 0.02f)
+                                        for (q in 1..5) r.quad(a, b, q / 6f - 0.005f, q / 6f + 0.005f, 0.2f, 2.9f, Color.White)
+                                        r.quad(a, b, 0.42f, 0.58f, 0f, 2.6f, Color(0xFF263238), 0.04f)
+                                        r.quad(a, b, 0.03f, 0.97f, 3.0f, 3.4f, Color.White)
+                                    }
+                                }
+                                2 -> {
+                                    if (roadSide) {
+                                        // three shop fronts with striped awnings and sign boards
+                                        for (q in 0..2) {
+                                            val u0 = 0.05f + q * 0.32f
+                                            val u1 = u0 + 0.26f
+                                            val st = (u1 - u0) / 6f
+                                            r.quad(a, b, u0, u1, 0.3f, 2.6f, Color(0xFF37474F), 0.02f)
+                                            r.quad(a, b, u0 + 0.02f, u1 - 0.02f, 0.4f, 2.5f, Color(0xFF90CAF9))
+                                            r.quad(a, b, u0, u1, 2.8f, 3.6f, awningCols[(q + key) % 3], 0.6f)
+                                            for (k in 0..2) r.quad(a, b, u0 + (2 * k + 1) * st, u0 + (2 * k + 2) * st, 2.8f, 3.6f, Color.White, 0.62f)
+                                            r.quad(a, b, u0 + 0.03f, u1 - 0.03f, 4.0f, 4.9f, Color(0xFFFFF8E1), 0.02f)
+                                        }
+                                        var k = 0
+                                        while (5.5f + k * 3f + 1.6f < bh - 0.6f) {
+                                            for (q in 0..4) r.quad(a, b, 0.06f + q * 0.19f, 0.17f + q * 0.19f, 5.5f + k * 3f, 5.5f + k * 3f + 1.6f, glassBlue, 0.02f)
+                                            k++
+                                        }
+                                    } else {
+                                        for (q in 0..3) r.quad(a, b, 0.1f + q * 0.22f, 0.24f + q * 0.22f, bh * 0.5f, bh * 0.5f + 1.4f, glassBlue, 0.02f)
+                                        r.quad(a, b, 0.35f, 0.65f, 0f, 3.4f, Color(0xFFB0BEC5), 0.02f)
+                                        for (k in 0..5) r.quad(a, b, 0.35f, 0.65f, 0.3f + k * 0.5f, 0.36f + k * 0.5f, Color(0xFF78909C))
+                                    }
+                                }
+                                3 -> {
+                                    val floors = floor(bh / 3f).toInt()
+                                    for (k in 1 until floors) for (q in 0..6) {
+                                        r.quad(a, b, 0.05f + q * 0.135f, 0.14f + q * 0.135f, k * 3f + 0.5f, k * 3f + 2f, Color(0xFF81D4FA), 0.02f)
+                                    }
+                                    if (roadSide) {
+                                        r.quad(a, b, 0.35f, 0.65f, 0f, 2.6f, Color(0xFF4FC3F7), 0.02f)
+                                        r.quad(a, b, 0.3f, 0.7f, 2.6f, 3.0f, Color(0xFFE53935), 0.4f)
+                                    }
+                                }
+                                else -> {
+                                    if (roadSide) {
+                                        for (u in floatArrayOf(0.1f, 0.55f)) {
+                                            r.quad(a, b, u, u + 0.35f, 0f, 4.2f, Color(0xFFECEFF1), 0.02f)
+                                            for (k in 0..5) r.quad(a, b, u, u + 0.35f, 0.5f + k * 0.65f, 0.6f + k * 0.65f, Color(0xFFB0BEC5))
+                                        }
+                                        r.quad(a, b, 0f, 1f, 5f, 6f, Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (detail) {
+                        // roof edge, air conditioners and an antenna on offices
+                        val rim = lerp(side, Color.Black, 0.15f)
+                        r.box(cx, cy, ax, ay, 15.2f, 7.2f, bh, bh + 0.5f, rim, rim, null)
+                        r.box(cx + ax * 6f, cy + ay * 6f, ax, ay, 1.6f, 1.2f, bh, bh + 1.4f, Color(0xFFB0BEC5), Color(0xFF90A4AE), null)
+                        r.box(cx - ax * 5f, cy - ay * 5f, ax, ay, 1.1f, 1.1f, bh, bh + 1f, Color(0xFFCFD8DC), Color(0xFF90A4AE), null)
+                        if (kind == 1) r.box(cx - ax * 9f, cy - ay * 9f, ax, ay, 0.15f, 0.15f, bh, bh + 5f, Color(0xFF9E9E9E), Color(0xFF757575), null)
+                    }
+                }
                 if (isHosp || isDest) {
                     // sign on the roof facing the road
                     val sx = cx - exs[e] * 7.5f
@@ -395,6 +727,86 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
                     }
                 }
             })
+        }
+    }
+    // trees, street lamps, benches and fire hydrants along the sidewalks
+    for (row in 0 until n) for (col in 0 until n) {
+        val z = city.zone[row * n + col]
+        val x0 = col * BL
+        val yy = row * BL
+        if (!near(x0 + BL / 2f, yy + BL / 2f, 180f)) continue
+        var idx = 0
+        var sAlong = 16f
+        while (sAlong <= BL - 16f) {
+            val spots = arrayOf(
+                floatArrayOf(x0 + sAlong, yy + 9.1f), floatArrayOf(x0 + sAlong, yy + BL - 9.1f),
+                floatArrayOf(x0 + 9.1f, yy + sAlong), floatArrayOf(x0 + BL - 9.1f, yy + sAlong)
+            )
+            for (p in spots) {
+                val myIdx = idx
+                idx++
+                val dd = hypot(p[0] - cam.px, p[1] - cam.py)
+                if (dd > 140f || dd < 1.5f) continue
+                val hv = hsh(row * 977 + col * 131 + myIdx)
+                val px0 = p[0]
+                val py0 = p[1]
+                when {
+                    (myIdx shr 2) % 2 == 1 -> objs.add(Obj(dd) {
+                        r.bill(px0, py0) { sx, sy, k ->
+                            drawRect(Color(0xFF546E7A), Offset(sx - 0.07f * k, sy - 4.2f * k), Size(0.14f * k, 4.2f * k))
+                            drawRect(Color(0xFF546E7A), Offset(sx - 0.07f * k, sy - 4.2f * k), Size(0.6f * k, 0.1f * k))
+                            drawOval(Color(0xFFFFF59D), Offset(sx + 0.33f * k, sy - 4.17f * k), Size(0.44f * k, 0.24f * k))
+                        }
+                    })
+                    z == 1 && hv < 0.5f -> objs.add(Obj(dd) {
+                        r.bill(px0, py0) { sx, sy, k ->
+                            drawRect(Color(0xFF6D4C41), Offset(sx - 0.7f * k, sy - 0.5f * k), Size(1.4f * k, 0.12f * k))
+                            drawRect(Color(0xFF6D4C41), Offset(sx - 0.7f * k, sy - 0.9f * k), Size(1.4f * k, 0.1f * k))
+                            drawRect(Color(0xFF37474F), Offset(sx - 0.6f * k, sy - 0.5f * k), Size(0.08f * k, 0.5f * k))
+                            drawRect(Color(0xFF37474F), Offset(sx + 0.52f * k, sy - 0.5f * k), Size(0.08f * k, 0.5f * k))
+                        }
+                    })
+                    z == 2 && hv < 0.6f -> objs.add(Obj(dd) {
+                        r.bill(px0, py0) { sx, sy, k ->
+                            drawRect(Color(0xFFE53935), Offset(sx - 0.16f * k, sy - 0.7f * k), Size(0.32f * k, 0.7f * k))
+                            drawCircle(Color(0xFFE53935), 0.16f * k, Offset(sx, sy - 0.7f * k))
+                            drawRect(Color(0xFFE53935), Offset(sx - 0.26f * k, sy - 0.5f * k), Size(0.52f * k, 0.12f * k))
+                        }
+                    })
+                    else -> {
+                        val pine = z == 0 && hv > 0.7f
+                        val tall = if (z == 0) 1f else 0.8f
+                        val tc = treeCols[(hv * 3f).toInt().coerceIn(0, 2)]
+                        objs.add(Obj(dd) {
+                            r.bill(px0, py0) { sx, sy, k ->
+                                drawOval(Color(0x2E283C5A), Offset(sx - 0.8f * k, sy - 0.3f * k), Size(2.2f * k, 0.6f * k))
+                                if (pine) {
+                                    drawRect(Color(0xFF795548), Offset(sx - 0.12f * k, sy - 0.8f * k), Size(0.24f * k, 0.8f * k))
+                                    val tiers = listOf(Color(0xFF2E7D32), Color(0xFF388E3C), Color(0xFF43A047))
+                                    for (i in 0..2) {
+                                        val hw = (1.2f - i * 0.3f) * k
+                                        val base = sy - (0.7f + i * 1.0f) * k
+                                        val tri = Path()
+                                        tri.moveTo(sx - hw, base)
+                                        tri.lineTo(sx + hw, base)
+                                        tri.lineTo(sx, base - 1.7f * k)
+                                        tri.close()
+                                        drawPath(tri, tiers[i])
+                                    }
+                                } else {
+                                    drawRect(Color(0xFF795548), Offset(sx - 0.12f * k, sy - 1.8f * tall * k), Size(0.24f * k, 1.8f * tall * k))
+                                    val dark = lerp(tc, Color.Black, 0.2f)
+                                    drawCircle(dark, 0.9f * k, Offset(sx - 0.55f * k, sy - 2.5f * tall * k))
+                                    drawCircle(dark, 0.85f * k, Offset(sx + 0.6f * k, sy - 2.6f * tall * k))
+                                    drawCircle(tc, 1.1f * k, Offset(sx, sy - 3.1f * tall * k))
+                                    drawCircle(Color(0x2EFFFFFF), 0.45f * k, Offset(sx - 0.35f * k, sy - 3.45f * tall * k))
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+            sAlong += 11f
         }
     }
     // traffic: cars travel the length of each street, one-way streets go one way.
@@ -492,9 +904,47 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
                     if (dd > 200f || dd < 3f) continue
                     val c = carCols[id % carCols.size]
                     val sideC = lerp(c, Color.Black, 0.25f)
+                    val truck = id % 5 == 4
+                    val roof = if (id % 5 == 2) Color(0xFF212121) else c
                     objs.add(Obj(dd) {
-                        r.box(cx, cy, ax, ay, 2.2f, 0.95f, 0.3f, 1.1f, c, sideC, c)
-                        r.box(cx - ax * 0.3f, cy - ay * 0.3f, ax, ay, 1.2f, 0.85f, 1.1f, 1.75f, Color(0xFF37474F), Color(0xFF263238), Color(0xFFECEFF1))
+                        r.shadow(cx - 1.2f, cy - 1.2f, ax, ay, 2.5f, 1.2f, Color(0x40232846))
+                        // wheels
+                        for (wx in floatArrayOf(1.4f, -1.4f)) for (wy in floatArrayOf(1f, -1f)) {
+                            r.box(cx + ax * wx + rx * wy * 0.9f, cy + ay * wx + ry * wy * 0.9f, ax, ay, 0.38f, 0.14f, 0f, 0.7f, Color(0xFF212121), Color(0xFF111111), null)
+                        }
+                        if (truck) {
+                            // box truck: cab in front, white box behind, far part first
+                            val camAhead = (cam.px - cx) * ax + (cam.py - cy) * ay > 0f
+                            val cab = {
+                                r.box(cx + ax * 1.6f, cy + ay * 1.6f, ax, ay, 0.9f, 1.0f, 0.3f, 1.9f, c, sideC, c) { a, b ->
+                                    r.quad(a, b, 0.1f, 0.9f, 1.1f, 1.75f, Color(0xFF263238), 0.02f)
+                                }
+                            }
+                            val cargo = {
+                                r.box(cx - ax * 0.8f, cy - ay * 0.8f, ax, ay, 1.6f, 1.1f, 0.4f, 2.8f, Color(0xFFECEFF1), Color(0xFFCFD8DC), Color(0xFFF5F5F5))
+                            }
+                            if (camAhead) { cargo(); cab() } else { cab(); cargo() }
+                        } else {
+                            r.box(cx, cy, ax, ay, 2.2f, 0.95f, 0.3f, 1.1f, c, sideC, c) { a, b ->
+                                val fwd = faces(a, b, cx, cy, ax, ay)
+                                when {
+                                    fwd > 1f -> {
+                                        r.quad(a, b, 0.08f, 0.28f, 0.75f, 0.95f, Color(0xFFFFF9C4), 0.02f)
+                                        r.quad(a, b, 0.72f, 0.92f, 0.75f, 0.95f, Color(0xFFFFF9C4), 0.02f)
+                                        r.quad(a, b, 0.3f, 0.7f, 0.45f, 0.6f, Color(0xFF455A64), 0.02f)
+                                    }
+                                    fwd < -1f -> {
+                                        r.quad(a, b, 0.06f, 0.24f, 0.72f, 0.92f, Color(0xFFFF1744), 0.02f)
+                                        r.quad(a, b, 0.76f, 0.94f, 0.72f, 0.92f, Color(0xFFFF1744), 0.02f)
+                                        r.quad(a, b, 0.38f, 0.62f, 0.5f, 0.66f, Color.White, 0.02f)
+                                    }
+                                    else -> r.quad(a, b, 0.49f, 0.51f, 0.35f, 1.05f, lerp(sideC, Color.Black, 0.3f), 0.01f)
+                                }
+                            }
+                            r.box(cx - ax * 0.3f, cy - ay * 0.3f, ax, ay, 1.2f, 0.85f, 1.1f, 1.75f, Color(0xFF37474F), Color(0xFF263238), roof) { a, b ->
+                                r.quad(a, b, 0.47f, 0.53f, 1.1f, 1.75f, c, 0.01f)
+                            }
+                        }
                     })
                 }
             }
@@ -517,14 +967,43 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
             val dd = hypot(x - cam.px, y - cam.py)
             if (dd > 120f) continue
             val c = pedCols[pid % pedCols.size]
+            val sleeve = lerp(c, Color.Black, 0.2f)
+            val skin = skinCols[pid % skinCols.size]
+            val hair = hairCols[pid % hairCols.size]
+            val pants = pantsCols[pid % pantsCols.size]
+            val kid = pid % 7 == 3
+            val bag = pid % 6 == 2
+            val dog = pid % 9 == 4
             val sw = sin(t * 6f + pid)
             objs.add(Obj(dd) {
                 r.bill(x, y) { px, py, k2 ->
-                    val legC = Color(0xFF37474F)
-                    drawRect(legC, Offset(px - 0.22f * k2 + sw * 0.05f * k2, py - 0.85f * k2), Size(0.18f * k2, 0.85f * k2))
-                    drawRect(legC, Offset(px + 0.04f * k2 - sw * 0.05f * k2, py - 0.85f * k2), Size(0.18f * k2, 0.85f * k2))
-                    drawRoundRect(c, Offset(px - 0.3f * k2, py - 1.5f * k2), Size(0.6f * k2, 0.7f * k2), CornerRadius(0.15f * k2, 0.15f * k2))
-                    drawCircle(Color(0xFFF2C29B), 0.2f * k2, Offset(px, py - 1.68f * k2))
+                    val k = if (kid) k2 * 0.7f else k2
+                    drawOval(Color(0x33283C5A), Offset(px - 0.4f * k, py - 0.12f * k), Size(0.8f * k, 0.24f * k))
+                    // shoes and legs
+                    drawRect(Color(0xFF212121), Offset(px - 0.24f * k + sw * 0.06f * k, py - 0.08f * k), Size(0.22f * k, 0.08f * k))
+                    drawRect(Color(0xFF212121), Offset(px + 0.03f * k - sw * 0.06f * k, py - 0.08f * k), Size(0.22f * k, 0.08f * k))
+                    drawRect(pants, Offset(px - 0.22f * k + sw * 0.05f * k, py - 0.85f * k), Size(0.18f * k, 0.8f * k))
+                    drawRect(pants, Offset(px + 0.04f * k - sw * 0.05f * k, py - 0.85f * k), Size(0.18f * k, 0.8f * k))
+                    // swinging arms with hands
+                    for (side in intArrayOf(-1, 1)) {
+                        val a = side * sw * 0.35f
+                        val sh = Offset(px + side * 0.3f * k, py - 1.42f * k)
+                        val hand = Offset(sh.x - sin(a) * 0.6f * k, sh.y + cos(a) * 0.6f * k)
+                        drawLine(sleeve, sh, hand, 0.12f * k, StrokeCap.Round)
+                        drawCircle(skin, 0.07f * k, hand)
+                    }
+                    drawRoundRect(c, Offset(px - 0.3f * k, py - 1.5f * k), Size(0.6f * k, 0.72f * k), CornerRadius(0.15f * k, 0.15f * k))
+                    // head and hair
+                    drawCircle(skin, 0.2f * k, Offset(px, py - 1.7f * k))
+                    drawArc(hair, 180f, 180f, true, Offset(px - 0.2f * k, py - 1.94f * k), Size(0.4f * k, 0.4f * k))
+                    if (bag) drawRect(Color(0xFF795548), Offset(px + 0.3f * k, py - 0.95f * k), Size(0.28f * k, 0.3f * k))
+                    if (dog) {
+                        drawLine(Color(0xFFE53935), Offset(px + 0.36f * k, py - 0.85f * k), Offset(px + 1.0f * k, py - 0.3f * k), 0.04f * k)
+                        drawOval(Color(0xFF8D6E63), Offset(px + 0.87f * k, py - 0.41f * k), Size(0.56f * k, 0.32f * k))
+                        drawCircle(Color(0xFF8D6E63), 0.12f * k, Offset(px + 1.4f * k, py - 0.38f * k))
+                        drawRect(Color(0xFF8D6E63), Offset(px + 0.92f * k, py - 0.15f * k), Size(0.05f * k, 0.15f * k))
+                        drawRect(Color(0xFF8D6E63), Offset(px + 1.3f * k, py - 0.15f * k), Size(0.05f * k, 0.15f * k))
+                    }
                 }
             })
         }
@@ -545,21 +1024,35 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
                     val poleH = if (lt) 3.6f else 2.4f
                     drawRect(Color(0xFF78909C), Offset(sx - 0.06f * k, sy - poleH * k), Size(0.12f * k, poleH * k))
                     if (lt) {
-                        drawRoundRect(Color(0xFF2B313A), Offset(sx - 0.25f * k, sy - 4.6f * k), Size(0.5f * k, 1.3f * k), CornerRadius(0.1f * k, 0.1f * k))
+                        drawRoundRect(Color(0xFF2B313A), Offset(sx - 0.28f * k, sy - 5.1f * k), Size(0.56f * k, 1.6f * k), CornerRadius(0.1f * k, 0.1f * k))
                         val red = floor(t / 3f).toInt() % 2 == 1
-                        drawCircle(if (red) Color(0xFFFF5252) else Color(0xFF5A2020), 0.15f * k, Offset(sx, sy - 4.3f * k))
-                        drawCircle(if (red) Color(0xFF1D4A30) else Color(0xFF69F0AE), 0.15f * k, Offset(sx, sy - 3.6f * k))
+                        drawCircle(if (red) Color(0xFFFF5252) else Color(0xFF5A2020), 0.16f * k, Offset(sx, sy - 4.8f * k))
+                        drawCircle(Color(0xFF5A4A20), 0.16f * k, Offset(sx, sy - 4.3f * k))
+                        drawCircle(if (red) Color(0xFF1D4A30) else Color(0xFF69F0AE), 0.16f * k, Offset(sx, sy - 3.8f * k))
+                        // street name sign
+                        drawRect(Color(0xFF2E7D32), Offset(sx - 0.7f * k, sy - 3.3f * k), Size(1.4f * k, 0.3f * k))
+                        drawRect(Color.White, Offset(sx - 0.55f * k, sy - 3.2f * k), Size(1.1f * k, 0.08f * k))
                     } else {
-                        val oct = Path()
-                        for (q in 0..7) {
-                            val a = (22.5 + 45.0 * q) * PI / 180.0
-                            val xq = sx + (cos(a) * 0.38 * k).toFloat()
-                            val yq = sy - 2.6f * k + (sin(a) * 0.38 * k).toFloat()
-                            if (q == 0) oct.moveTo(xq, yq) else oct.lineTo(xq, yq)
+                        for (ring in 0..1) {
+                            val rad = if (ring == 0) 0.4f else 0.36f
+                            val oct = Path()
+                            for (q in 0..7) {
+                                val a = (22.5 + 45.0 * q) * PI / 180.0
+                                val xq = sx + (cos(a) * rad * k).toFloat()
+                                val yq = sy - 2.6f * k + (sin(a) * rad * k).toFloat()
+                                if (q == 0) oct.moveTo(xq, yq) else oct.lineTo(xq, yq)
+                            }
+                            oct.close()
+                            drawPath(oct, if (ring == 0) Color.White else Color(0xFFE53935))
                         }
-                        oct.close()
-                        drawPath(oct, Color(0xFFE53935))
-                        drawRect(Color.White, Offset(sx - 0.24f * k, sy - 2.64f * k), Size(0.48f * k, 0.08f * k))
+                        if (dd < 60f) {
+                            val ls = 0.56f * k / lab.stop.size.width
+                            translate(sx - lab.stop.size.width * ls / 2f, sy - 2.6f * k - lab.stop.size.height * ls / 2f) {
+                                scale(ls, Offset.Zero) { drawText(lab.stop) }
+                            }
+                        } else {
+                            drawRect(Color.White, Offset(sx - 0.24f * k, sy - 2.64f * k), Size(0.48f * k, 0.08f * k))
+                        }
                     }
                 }
             })
@@ -575,29 +1068,45 @@ private fun DrawScope.drawWorld(city: CityData, plan: DrivePlan, t: Float, destK
     for (o in objs) o.fn()
 }
 
-private fun DrawScope.drawCab(t: Float, d: Float) {
+private fun DrawScope.drawCab(t: Float, plan: DrivePlan, d: Float, lab: Labels) {
     val w = size.width
     val h = size.height
     val frame = Color(0xFF1D2027)
     val flash = floor(t * 4f).toInt() % 2 == 0
-    // light bar glow on the windshield
-    drawRect(if (flash) Color(0x2EFF1744) else Color(0x1FFFFFFF), size = Size(w, h * 0.2f))
+    val red = Color(0xFFD01010)
+    // light bar glow on the windshield, red then blue
+    drawRect(if (flash) Color(0x2EFF1744) else Color(0x241E78FF), size = Size(w, h * 0.2f))
     drawRect(frame, size = Size(w, h * 0.055f))
-    drawRect(if (flash) Color(0x8CFF1744) else Color(0x80FFFFFF), Offset(0f, h * 0.055f), Size(w, h * 0.01f))
+    for (i in 0..7) {
+        val on = (i + (if (flash) 0 else 1)) % 2 == 0
+        drawRect(if (on) Color(0xD9FF1744) else Color(0xD92979FF), Offset(i * w / 8f, h * 0.055f), Size(w / 8f + 1f, h * 0.01f))
+    }
+    // sun visors
+    drawRoundRect(Color(0xFF3A414E), Offset(w * 0.05f, h * 0.062f), Size(w * 0.36f, h * 0.03f), CornerRadius(8f, 8f))
+    drawRoundRect(Color(0xFF3A414E), Offset(w * 0.59f, h * 0.062f), Size(w * 0.36f, h * 0.03f), CornerRadius(8f, 8f))
     val pl = Path()
     pl.moveTo(0f, 0f); pl.lineTo(w * 0.09f, 0f); pl.lineTo(w * 0.02f, h * 0.62f); pl.lineTo(0f, h * 0.62f); pl.close()
     drawPath(pl, frame)
     val pr = Path()
     pr.moveTo(w, 0f); pr.lineTo(w * 0.91f, 0f); pr.lineTo(w * 0.98f, h * 0.62f); pr.lineTo(w, h * 0.62f); pr.close()
     drawPath(pr, frame)
-    // red hood
+    // side mirrors
+    for (mx in floatArrayOf(w * 0.06f, w * 0.94f)) {
+        drawRoundRect(red, Offset(mx - w * 0.07f, h * 0.5f), Size(w * 0.14f, h * 0.085f), CornerRadius(10f, 10f))
+        drawRoundRect(
+            Brush.verticalGradient(listOf(Color(0xFFB3E5FC), Color(0xFF8A8FB0)), startY = h * 0.505f, endY = h * 0.58f),
+            Offset(mx - w * 0.06f, h * 0.507f), Size(w * 0.12f, h * 0.07f), cornerRadius = CornerRadius(8f, 8f)
+        )
+        drawRect(Color(0x59FFFFFF), Offset(mx - w * 0.05f, h * 0.512f), Size(w * 0.03f, h * 0.06f))
+    }
+    // red hood with a shine and a white stripe
     val hood = Path()
     hood.moveTo(0f, h * 0.70f)
     hood.qTo(0f, h * 0.70f, w / 2f, h * 0.655f, w, h * 0.70f)
     hood.lineTo(w, h)
     hood.lineTo(0f, h)
     hood.close()
-    drawPath(hood, Color(0xFFD01010))
+    drawPath(hood, red)
     val shine = Path()
     shine.moveTo(w * 0.1f, h * 0.69f)
     shine.qTo(w * 0.1f, h * 0.69f, w / 2f, h * 0.66f, w * 0.9f, h * 0.69f)
@@ -605,6 +1114,17 @@ private fun DrawScope.drawCab(t: Float, d: Float) {
     shine.qTo(w * 0.9f, h * 0.695f, w / 2f, h * 0.668f, w * 0.1f, h * 0.695f)
     shine.close()
     drawPath(shine, Color(0x40FFFFFF))
+    drawOval(Color(0x1FFFFFFF), Offset(w * 0.08f, h * 0.74f), Size(w * 0.44f, h * 0.04f))
+    val stripe = Path()
+    stripe.moveTo(0f, h * 0.716f)
+    stripe.qTo(0f, h * 0.716f, w / 2f, h * 0.674f, w, h * 0.716f)
+    stripe.lineTo(w, h * 0.724f)
+    stripe.qTo(w, h * 0.724f, w / 2f, h * 0.682f, 0f, h * 0.724f)
+    stripe.close()
+    drawPath(stripe, Color.White)
+    // wipers at rest
+    drawLine(Color(0xFF111111), Offset(w * 0.18f, h * 0.735f), Offset(w * 0.5f, h * 0.715f), 4f, StrokeCap.Round)
+    drawLine(Color(0xFF111111), Offset(w * 0.58f, h * 0.735f), Offset(w * 0.88f, h * 0.716f), 4f, StrokeCap.Round)
     // dashboard
     val dash = Path()
     dash.moveTo(0f, h * 0.75f)
@@ -613,16 +1133,91 @@ private fun DrawScope.drawCab(t: Float, d: Float) {
     dash.lineTo(0f, h)
     dash.close()
     drawPath(dash, Color(0xFF2B313A))
-    val gy = h * 0.8f
-    for (gx in floatArrayOf(w * 0.3f, w * 0.45f)) {
-        drawCircle(Color(0xFF3A414E), w * 0.046f, Offset(gx, gy))
-        val a = -2.4f + d % 3f
-        drawLine(Color(0xFFFF6A3D), Offset(gx, gy), Offset(gx + w * 0.03f * cos(a), gy + w * 0.03f * sin(a)), 3f, StrokeCap.Round)
+    val lip = Path()
+    lip.moveTo(0f, h * 0.75f)
+    lip.qTo(0f, h * 0.75f, w / 2f, h * 0.72f, w, h * 0.75f)
+    lip.lineTo(w, h * 0.758f)
+    lip.qTo(w, h * 0.758f, w / 2f, h * 0.728f, 0f, h * 0.758f)
+    lip.close()
+    drawPath(lip, Color(0xFF232830))
+    // speed and engine gauges
+    drawRoundRect(Color(0xFF1F242B), Offset(w * 0.2f, h * 0.765f), Size(w * 0.36f, h * 0.075f), CornerRadius(18f, 18f))
+    val gy = h * 0.803f
+    val gr = w * 0.055f
+    for (g in 0..1) {
+        val gx = if (g == 0) w * 0.29f else w * 0.47f
+        val v = if (g == 0) 0.55f + 0.25f * sin(t) else 0.45f + 0.2f * sin(t * 1.3f)
+        drawCircle(Color(0xFF3A414E), gr, Offset(gx, gy))
+        for (q in 0..8) {
+            val a = (PI * 0.75 + q / 8.0 * PI * 1.5).toFloat()
+            drawLine(Color(0xFFECEFF1), Offset(gx + cos(a) * gr * 0.82f, gy + sin(a) * gr * 0.82f), Offset(gx + cos(a) * gr * 0.95f, gy + sin(a) * gr * 0.95f), 1.5f)
+        }
+        val a = (PI * 0.75 + v * PI * 1.5).toFloat()
+        drawLine(Color(0xFFFF6A3D), Offset(gx, gy), Offset(gx + cos(a) * gr * 0.73f, gy + sin(a) * gr * 0.73f), 3f, StrokeCap.Round)
+        drawCircle(Color.White, 3f, Offset(gx, gy))
+        val lt = if (g == 0) lab.mph else lab.rpm
+        drawText(lt, topLeft = Offset(gx - lt.size.width / 2f, gy + gr * 0.58f - lt.size.height / 2f))
     }
-    // steering wheel
+    // siren control panel: lights and siren on, flashing with the light bar
+    drawRoundRect(Color(0xFF1F242B), Offset(w * 0.62f, h * 0.77f), Size(w * 0.33f, h * 0.1f), CornerRadius(12f, 12f))
+    for (i in 0..3) {
+        val bx = w * 0.64f + (i % 2) * w * 0.15f
+        val by = h * 0.778f + (i / 2) * h * 0.045f
+        val col = when (i) {
+            0 -> if (flash) Color(0xFFFF1744) else Color(0xFFB71C1C)
+            1 -> if (flash) Color(0xFF2979FF) else Color(0xFF0D47A1)
+            else -> Color(0xFF3A414E)
+        }
+        drawRoundRect(col, Offset(bx, by), Size(w * 0.135f, h * 0.037f), CornerRadius(6f, 6f))
+        val lt = lab.buttons[i]
+        drawText(lt, topLeft = Offset(bx + w * 0.0675f - lt.size.width / 2f, by + h * 0.0185f - lt.size.height / 2f))
+    }
+    // GPS screen showing the route and where the ambulance is on it
+    drawRoundRect(Color(0xFF1F242B), Offset(w * 0.62f, h * 0.88f), Size(w * 0.33f, h * 0.09f), CornerRadius(10f, 10f))
+    val sl = w * 0.635f
+    val st = h * 0.888f
+    val sw = w * 0.3f
+    val sh = h * 0.074f
+    drawRect(Color(0xFF263238), Offset(sl, st), Size(sw, sh))
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    for (p in plan.pts) {
+        minX = min(minX, p[0]); maxX = max(maxX, p[0])
+        minY = min(minY, p[1]); maxY = max(maxY, p[1])
+    }
+    val gs = min((sw - 16f) / max(1f, maxX - minX), (sh - 12f) / max(1f, maxY - minY))
+    val ox = sl + sw / 2f - (minX + maxX) / 2f * gs
+    val oy = st + sh / 2f - (minY + maxY) / 2f * gs
+    fun gp(x: Float, y: Float) = Offset(ox + x * gs, oy + y * gs)
+    for (i in 0 until plan.pts.size - 1) {
+        drawLine(Color(0xFF7D82A8), gp(plan.pts[i][0], plan.pts[i][1]), gp(plan.pts[i + 1][0], plan.pts[i + 1][1]), 3f, StrokeCap.Round)
+    }
+    val cam = plan.camAt(d)
+    for (i in 0..cam.seg) {
+        val b = if (i < cam.seg) plan.pts[i + 1] else null
+        val end = if (b != null) gp(b[0], b[1]) else {
+            val a0 = plan.pts[i]
+            val a1 = plan.pts[i + 1]
+            val segLen = plan.dist[i + 1] - plan.dist[i]
+            val u = if (segLen > 0f) ((d - plan.dist[i]) / segLen).coerceIn(0f, 1f) else 0f
+            gp(a0[0] + (a1[0] - a0[0]) * u, a0[1] + (a1[1] - a0[1]) * u)
+        }
+        drawLine(Color(0xFF3FA2FF), gp(plan.pts[i][0], plan.pts[i][1]), end, 3f, StrokeCap.Round)
+        if (i == cam.seg) drawCircle(Color(0xFFFF6A3D), 4f, end)
+    }
+    val last = plan.pts.last()
+    drawCircle(Color(0xFF3FA2FF), 4f, gp(last[0], last[1]))
+    // steering wheel with spokes and a red badge
     val c = Offset(w * 0.38f, h * 1.03f)
     val rad = w * 0.36f
+    drawArc(Color(0xFF444444), 215f, 110f, false, Offset(c.x - rad - w * 0.022f, c.y - rad - w * 0.022f), Size((rad + w * 0.022f) * 2f, (rad + w * 0.022f) * 2f), style = Stroke(3f))
     drawArc(Color(0xFF111111), 202f, 136f, false, Offset(c.x - rad, c.y - rad), Size(rad * 2f, rad * 2f), style = Stroke(w * 0.056f, cap = StrokeCap.Round))
+    drawLine(Color(0xFF1A1A1A), Offset(c.x - rad * 0.9f, c.y - rad * 0.32f), Offset(c.x - rad * 0.25f, c.y - rad * 0.18f), w * 0.035f, StrokeCap.Round)
+    drawLine(Color(0xFF1A1A1A), Offset(c.x + rad * 0.9f, c.y - rad * 0.32f), Offset(c.x + rad * 0.25f, c.y - rad * 0.18f), w * 0.035f, StrokeCap.Round)
+    drawOval(Color(0xFF1A1A1A), Offset(c.x - rad * 0.3f, c.y - rad * 0.32f), Size(rad * 0.6f, rad * 0.4f))
+    drawCircle(red, rad * 0.06f, Offset(c.x, c.y - rad * 0.17f))
 }
 
 @Composable
@@ -643,6 +1238,17 @@ fun DriveScene(
     }
     var t by remember { mutableFloatStateOf(0f) }
     val traffic = remember(plan) { Traffic(city.n) }
+    val tm = rememberTextMeasurer()
+    val labels = remember(tm) {
+        val small = TextStyle(color = Color(0xFF90A4AE), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        val btn = TextStyle(color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Labels(
+            tm.measure("STOP", TextStyle(color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)),
+            tm.measure("MPH", small),
+            tm.measure("RPM", small),
+            listOf("LIGHTS", "SIREN", "HORN", "PA").map { tm.measure(it, btn) }
+        )
+    }
     val done by rememberUpdatedState(onDone)
     val finished = remember { booleanArrayOf(false) }
     fun finish() {
@@ -672,8 +1278,8 @@ fun DriveScene(
     }
     Box(Modifier.fillMaxSize().background(Color(0xFF1D2027))) {
         Canvas(Modifier.fillMaxSize()) {
-            drawWorld(city, plan, t, destKey, crashAt, traffic)
-            drawCab(t, plan.distAt(t))
+            drawWorld(city, plan, t, destKey, crashAt, traffic, labels)
+            drawCab(t, plan, plan.distAt(t), labels)
         }
         val cam = plan.camAt(plan.distAt(t))
         val blocks = plan.pts.size - 1
