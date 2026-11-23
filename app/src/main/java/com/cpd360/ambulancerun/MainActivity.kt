@@ -48,7 +48,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val version = packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
-        setContent { HomeScreen(version) }
+        val player = PlayerData.load(this)
+        setContent { HomeScreen(version, player) }
     }
 }
 
@@ -121,8 +122,8 @@ private fun NavBtn(kind: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun HomeScreen(version: String) {
-    val rs = remember { RouteState() }
+fun HomeScreen(version: String, player: PlayerData) {
+    val rs = remember { RouteState(player) }
     val fast = remember(rs.version, rs.stage) { rs.fastest() }
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
@@ -171,7 +172,7 @@ fun HomeScreen(version: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "City " + rs.level + "." + (rs.idx + 1) + (if (rs.stage == 0) ": call" else ": hospital"),
+                "City " + rs.level + "." + (rs.idx + 1) + ", run " + rs.run + " of 5",
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
             )
             Box(
@@ -199,15 +200,13 @@ fun HomeScreen(version: String) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (rs.stage == 0) "Drag from the red station to the glowing building. Pinch to zoom, drag elsewhere to move the map."
-                        else "Drag from the ambulance to a glowing hospital. Pinch to zoom, drag elsewhere to move the map.",
+                        if (rs.stage == 0) "Drag from the red station to the glowing building. Pinch to zoom, drag with two fingers to move the map."
+                        else "Drag from the ambulance to the right hospital. Double tap a hospital to see what it treats.",
                         fontSize = 15.sp
                     )
                 }
             } else {
                 val user = rs.city.pathTime(rs.path.toList())
-                val wrong = rs.wrongHospital()
-                val failed = user > par || wrong
                 val rt = rating(user, fast)
                 val names = listOf("Green", "Yellow", "Orange", "Red")
                 val cols = listOf(Color(0xFF4DC43B), Color(0xFFFFD54F), Color(0xFFFF9800), Color(0xFFE53935))
@@ -219,25 +218,41 @@ fun HomeScreen(version: String) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        if (wrong) "Wrong hospital! Call failed" else if (user > par) "Too slow! Call failed" else "Route complete",
+                        if (rs.failReason != "") "Run failed: " + rs.failReason else if (rs.runOver) "Run complete" else "Route complete",
                         fontSize = 18.sp, fontWeight = FontWeight.Bold
                     )
                     if (rs.stage == 1) {
                         Text("To the call: " + fmt(rs.leg1User) + "   Fastest " + fmt(rs.leg1Fast), fontSize = 14.sp)
                     }
-                    Text(
-                        (if (rs.stage == 1) "To the hospital: " else "Your time ") + fmt(user) + "   Fastest " + fmt(fast),
-                        fontSize = 14.sp
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(cols[rt], RoundedCornerShape(16.dp))
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                    ) {
-                        Text(names[rt] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    if (rs.accSeg < 0) {
+                        Text(
+                            (if (rs.stage == 1) "To the hospital: " else "Your time ") + fmt(user) + "   Fastest " + fmt(fast),
+                            fontSize = 14.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(cols[rt], RoundedCornerShape(16.dp))
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(names[rt] + " route", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    if (!failed && rs.stage == 0) {
+                    if (rs.runOver) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Credits earned: +" + rs.earned, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("Level " + player.level + "   Credits " + player.credits, fontSize = 13.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
+                                .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
+                                .clickable { rs.nextRun() }
+                                .padding(horizontal = 22.dp, vertical = 10.dp)
+                        ) {
+                            Text("Next run", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else if (rs.stage == 0) {
                         Spacer(Modifier.height(10.dp))
                         Box(
                             modifier = Modifier
@@ -257,6 +272,11 @@ fun HomeScreen(version: String) {
                 Chip("Next city (test)") { rs.nextCity() }
             }
             Spacer(Modifier.height(6.dp))
+            Text(
+                "Level " + player.level + "  Drive " + "%.3f".format(player.drive) + "  Avoid " + "%.2f".format(player.avoidance) +
+                    "  Dodge " + Math.round(player.dodge * 100).toInt() + "%",
+                color = Color.White, fontSize = 12.sp
+            )
             Text("Version $version", color = Color.White, fontSize = 12.sp)
         }
     }
