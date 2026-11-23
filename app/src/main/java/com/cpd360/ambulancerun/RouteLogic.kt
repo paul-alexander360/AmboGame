@@ -39,7 +39,6 @@ class RouteState(val player: PlayerData) {
     var leg1Fast by mutableStateOf(0.0)
     var leg1Grade by mutableIntStateOf(0)
     var reached by mutableStateOf<Hospital?>(null)
-    val needLevel = 4
     var popup by mutableStateOf<Hospital?>(null)
     var accSeg by mutableIntStateOf(-1)
     var accType by mutableStateOf("")
@@ -50,6 +49,7 @@ class RouteState(val player: PlayerData) {
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
     private var hospCycle = -1
+    var patient by mutableStateOf(Patient.make(1))
 
     private fun makeCity(l: Int, i: Int): CityData {
         val c = CityData(l, i, Random.nextLong())
@@ -95,7 +95,7 @@ class RouteState(val player: PlayerData) {
         return Offset(city.accX(h.slot), city.accY(h.slot))
     }
 
-    fun correct(): List<Hospital> = city.hospitals.filter { it.level >= needLevel }
+    fun correct(): List<Hospital> = city.hospitals.filter { patient.okAt(it.level) }
 
     fun starts(): IntArray = city.startNodes(startSlot())
 
@@ -110,7 +110,7 @@ class RouteState(val player: PlayerData) {
 
     fun wrongHospital(): Boolean {
         val h = reached
-        return stage == 1 && done && h != null && h.level < needLevel
+        return stage == 1 && done && h != null && !patient.okAt(h.level)
     }
 
     fun load(l: Int, i: Int) {
@@ -125,6 +125,7 @@ class RouteState(val player: PlayerData) {
 
     private fun resetRun() {
         popup = null
+        patient = Patient.make(level)
         stage = 0
         path.clear()
         done = false
@@ -172,6 +173,25 @@ class RouteState(val player: PlayerData) {
 
     fun begin() {
         if (!done) started = true
+    }
+
+    fun examDone() {
+        if (patient.dead) {
+            runOver = true
+            failReason = "Patient did not survive"
+            award(creditFor(leg1Grade))
+            version++
+            return
+        }
+        val miss = patient.missing()
+        if (miss != "") {
+            runOver = true
+            failReason = miss
+            award(0)
+            version++
+            return
+        }
+        startHospital()
     }
 
     fun startHospital() {
@@ -245,7 +265,7 @@ class RouteState(val player: PlayerData) {
         var found: Hospital? = null
         for (h in city.hospitals) {
             if (city.goalNodes(h.slot).contains(n)) {
-                if (found == null || (h.level >= needLevel && found.level < needLevel)) found = h
+                if (found == null || (patient.okAt(h.level) && !patient.okAt(found.level))) found = h
             }
         }
         if (found != null) {
