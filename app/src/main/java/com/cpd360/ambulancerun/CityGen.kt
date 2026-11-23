@@ -41,7 +41,8 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     val m: Int = n + 1
     val w: Float = 80f * n + 38f
     val h: Float = 80f * n + 40f
-    val driver: Double = Levels.driver[level - 1]
+    var drv: Double = 0.1
+    var heavy: Double = 0.0
     val distraction: Double = Levels.distraction[level - 1]
     val zone = IntArray(n * n)
     val dens = IntArray(n * n)
@@ -62,6 +63,16 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         doubleArrayOf(0.5, 0.8, 1.0)
     )
     private val ratingTbl = doubleArrayOf(-0.6, 1.0, 2.0)
+    private val pedTbl = arrayOf(
+        doubleArrayOf(0.1, 0.2, 0.3),
+        doubleArrayOf(0.2, 0.3, 0.4),
+        doubleArrayOf(0.2, 0.2, 0.2)
+    )
+    private val mvcTbl = arrayOf(
+        doubleArrayOf(0.1, 0.1, 0.3),
+        doubleArrayOf(0.2, 0.3, 0.5),
+        doubleArrayOf(0.4, 0.5, 0.6)
+    )
     private val prefixes = listOf("General", "Sacred")
     private val roots = listOf(
         "Memorial", "Regional", "University", "Health", "Community", "Mercy", "Baptist",
@@ -257,9 +268,36 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             list = listOf(blockTraffic(i1 - 1, j), blockTraffic(i1, j))
         }
         val v = list.filterNotNull()
-        val traffic = if (v.isEmpty()) 0.0 else v.average()
-        val drv = driver + (if (level == 8 && traffic > 0.5) -0.2 else 0.0)
+        var traffic = if (v.isEmpty()) 0.0 else v.average()
+        if (traffic > 0.5) traffic = maxOf(0.0, traffic - heavy)
         return 30.0 * maxOf(0.2, ratingTbl[q] + traffic + drv)
+    }
+
+    private fun blockRisk(tbl: Array<DoubleArray>, bc: Int, br: Int): Double? {
+        if (bc < 0 || bc >= n || br < 0 || br >= n) return null
+        return tbl[zone[br * n + bc]][dens[br * n + bc]]
+    }
+
+    fun segRisk(a: Int, b: Int, ped: Boolean): Double {
+        val i1 = a % m
+        val j1 = a / m
+        val i2 = b % m
+        val j2 = b / m
+        val tbl = if (ped) pedTbl else mvcTbl
+        val list: List<Double?> = if (j1 == j2) {
+            val i = minOf(i1, i2)
+            listOf(blockRisk(tbl, i, j1 - 1), blockRisk(tbl, i, j1))
+        } else {
+            val j = minOf(j1, j2)
+            listOf(blockRisk(tbl, i1 - 1, j), blockRisk(tbl, i1, j))
+        }
+        val v = list.filterNotNull()
+        return if (v.isEmpty()) 0.0 else v.average()
+    }
+
+    fun accidentChance(x: Double, z: Double, s: Double, l: Double): Double {
+        val c = 0.07 * (1.0 + x + distraction - (z + s + l))
+        return Math.round(maxOf(0.01, c) * 1000.0) / 1000.0
     }
 
     private fun nodeTime(u: Int): Double = 1.0 + (if (light[u]) 4.0 else 2.0)
