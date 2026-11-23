@@ -1,6 +1,12 @@
 package com.cpd360.ambulancerun
 
 import android.os.Bundle
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.delay
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -127,12 +133,53 @@ fun HomeScreen(version: String, player: PlayerData) {
     val fast = remember(rs.version, rs.stage) { rs.fastest() }
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
-    if (screen == 1) {
-        ExamScreen(rs.patient, rs.level) {
-            rs.examDone()
-            screen = 0
+    var menu by remember { mutableStateOf(false) }
+    when (screen) {
+        1 -> {
+            ExamScreen(rs.patient, rs.level) {
+                rs.examDone()
+                screen = 0
+            }
+            return
         }
-        return
+        2 -> {
+            AmbulanceScreen(player) {
+                rs.applyPlayer()
+                screen = 0
+            }
+            return
+        }
+        3 -> {
+            CharacterScreen(player) {
+                rs.applyPlayer()
+                screen = 0
+            }
+            return
+        }
+        4 -> {
+            SettingsScreen(player, version) { screen = 0 }
+            return
+        }
+        5 -> {
+            DriveScene(
+                city = rs.city,
+                nodes = remember(rs.version, rs.stage) { rs.driveNodes() },
+                start = rs.startPt(),
+                end = rs.driveEnd(),
+                toHospital = rs.stage == 1,
+                destKey = rs.destKey(),
+                crash = rs.accSeg >= 0,
+                sirenOn = player.sirenSound
+            ) {
+                rs.driveShown = true
+                screen = 0
+            }
+            return
+        }
+    }
+    LaunchedEffect(rs.done, rs.stage) {
+        if (rs.done && !rs.driveShown && player.driveScenes && rs.path.size > 0) screen = 5
+        else if (rs.done) rs.driveShown = true
     }
     Box(
         modifier = Modifier
@@ -150,27 +197,24 @@ fun HomeScreen(version: String, player: PlayerData) {
                 HospitalPopup(pop) { rs.popup = null }
             }
         }
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            NavBtn(0) { rs.focusStation() }
-            NavBtn(1) { rs.focusCall() }
-            NavBtn(2) { rs.focusHospital() }
-        }
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .safeDrawingPadding()
-                .padding(8.dp)
-                .background(Color(0xEBFF6A3D), RoundedCornerShape(24.dp))
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            MenuButton { menu = true }
+            Spacer(Modifier.width(8.dp))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color(0xEBFF6A3D), RoundedCornerShape(24.dp))
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             Text(
                 "City " + rs.level + "." + (rs.idx + 1) + ", run " + rs.run + " of 5",
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
@@ -181,6 +225,7 @@ fun HomeScreen(version: String, player: PlayerData) {
                     .padding(horizontal = 10.dp, vertical = 3.dp)
             ) {
                 Text("Par " + fmt(par), color = Color(0xFFBF360C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
             }
         }
         Column(
@@ -279,5 +324,127 @@ fun HomeScreen(version: String, player: PlayerData) {
             )
             Text("Version $version", color = Color.White, fontSize = 12.sp)
         }
+        if (menu) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000))
+                    .clickable { menu = false }
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .safeDrawingPadding()
+                    .padding(start = 8.dp, top = 64.dp)
+            ) {
+                MenuPanel { pick ->
+                    menu = false
+                    when (pick) {
+                        0 -> screen = 2
+                        1 -> screen = 3
+                        2 -> screen = 4
+                        3 -> rs.focusStation()
+                        4 -> rs.focusCall()
+                        5 -> rs.focusHospital()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(Color(0xEBFF6A3D), RoundedCornerShape(16.dp))
+            .border(2.dp, Color(0xFFFFFFFF), RoundedCornerShape(16.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.size(24.dp)) {
+            val w = size.width
+            for (k in 0..2) {
+                val y = w * (0.2f + 0.3f * k)
+                drawLine(Color.White, Offset(w * 0.1f, y), Offset(w * 0.9f, y), w * 0.13f, StrokeCap.Round)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuItem(label: String, icon: @Composable () -> Unit, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .width(230.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { icon() }
+        Spacer(Modifier.width(12.dp))
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2B313A))
+    }
+}
+
+@Composable
+private fun MenuIcon(draw: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF9BF076), Color(0xFF4DC43B))))
+            .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.size(34.dp)) { draw() }
+    }
+}
+
+@Composable
+private fun MenuPanel(onPick: (Int) -> Unit) {
+    Column(
+        modifier = Modifier
+            .background(Color.White, RoundedCornerShape(20.dp))
+            .border(3.dp, Color(0xFFFF6A3D), RoundedCornerShape(20.dp))
+            .padding(8.dp)
+    ) {
+        MenuItem("Ambulance", {
+            MenuIcon {
+                val sc = size.width / 1780f
+                translate(0f, size.height / 2f - 440f * sc) { scale(sc, Offset.Zero) { ambulanceSide(0) } }
+            }
+        }) { onPick(0) }
+        MenuItem("Character", {
+            MenuIcon {
+                val sc = size.height / 330f
+                translate(size.width / 2f - 85f * sc, 0f) { scale(sc, Offset.Zero) { paramedic(false, 0, 0, 1, 0) } }
+            }
+        }) { onPick(1) }
+        MenuItem("Settings", {
+            MenuIcon {
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val r = size.width * 0.3f
+                for (k in 0..7) {
+                    rotate(45f * k, c) {
+                        drawRect(Color.White, Offset(c.x - r * 0.22f, c.y - r * 1.3f), Size(r * 0.44f, r * 0.5f))
+                    }
+                }
+                drawCircle(Color.White, r, c)
+                drawCircle(Color(0xFF4DC43B), r * 0.42f, c)
+            }
+        }) { onPick(2) }
+        Box(
+            Modifier
+                .padding(vertical = 6.dp)
+                .width(230.dp)
+                .height(2.dp)
+                .background(Color(0xFFE0E2F2))
+        )
+        MenuItem("Find station", { NavBtn(0) { onPick(3) } }) { onPick(3) }
+        MenuItem("Find call", { NavBtn(1) { onPick(4) } }) { onPick(4) }
+        MenuItem("Find hospital", { NavBtn(2) { onPick(5) } }) { onPick(5) }
     }
 }
