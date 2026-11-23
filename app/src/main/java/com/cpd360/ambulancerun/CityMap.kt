@@ -569,8 +569,21 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
         val route = Path()
         val sp = rs.startPt()
         route.moveTo(sp.x, sp.y)
-        for (n in rs.path) route.lineTo(c.nodeX(n % c.m), c.nodeY(n / c.m))
-        if (rs.done) {
+        var crash: Offset? = null
+        val acc = rs.accSeg
+        val lim = if (acc >= 0) acc else rs.path.size
+        for (q in 0 until lim) {
+            val n = rs.path[q]
+            route.lineTo(c.nodeX(n % c.m), c.nodeY(n / c.m))
+        }
+        if (acc >= 0) {
+            val a = rs.path[acc - 1]
+            val b = rs.path[acc]
+            val mx = (c.nodeX(a % c.m) + c.nodeX(b % c.m)) / 2f
+            val my = (c.nodeY(a / c.m) + c.nodeY(b / c.m)) / 2f
+            route.lineTo(mx, my)
+            crash = Offset(mx, my)
+        } else if (rs.done) {
             val ep = rs.endPt()
             route.lineTo(ep.x, ep.y)
         }
@@ -579,6 +592,14 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
         translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rst(6f)) }
         drawPath(route, Color(0xFF2E7BFF), style = rst(6f))
         translate(0f, -1.3f) { drawPath(route, Color(0xFFBFE0FF), style = rst(2f)) }
+        val cr = crash
+        if (cr != null) {
+            drawCircle(Color(0x66E53935), 12f, cr)
+            drawCircle(Color.White, 8f, cr)
+            drawCircle(Color(0xFFE53935), 6.5f, cr)
+            box(Color.White, cr.x - 1f, cr.y - 4f, 2f, 5f, 0.8f)
+            drawCircle(Color.White, 1.1f, Offset(cr.x, cr.y + 3f))
+        }
     }
     val s = rs.startSlot()
     val ax = c.accX(s)
