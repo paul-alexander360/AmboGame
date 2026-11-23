@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App icon background: blue sky and green grass -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0 H108 V67 H0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="67"
+                android:startColor="#FF7FD0FF"
+                android:endColor="#FF2A8FE0" />
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FF9BD468" android:pathData="M0,67 H108 V108 H0 Z" />
+    <path android:fillColor="#FF7FB851" android:pathData="M0,67 H108 V70 H0 Z" />
+</vector>
