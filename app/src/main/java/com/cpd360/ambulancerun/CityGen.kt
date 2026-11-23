@@ -5,7 +5,7 @@ import kotlin.random.Random
 
 class Slot(val bc: Int, val br: Int, val corner: Int)
 
-class Hospital(val slot: Slot, val level: Int)
+class Hospital(val slot: Slot, val level: Int, val name: String)
 
 object Levels {
     val sizes = arrayOf(
@@ -62,6 +62,15 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         doubleArrayOf(0.5, 0.8, 1.0)
     )
     private val ratingTbl = doubleArrayOf(-0.6, 1.0, 2.0)
+    private val prefixes = listOf("General", "Sacred")
+    private val roots = listOf(
+        "Memorial", "Regional", "University", "Health", "Community", "Mercy", "Baptist",
+        "Presbyterian", "Methodist", "Valley", "County", "Samaritan", "Foundation"
+    )
+    private val saints = listOf(
+        "St Joseph", "St Mary", "St Luke", "St Francis", "St John", "St Michael", "St Thomas", "St Anthony"
+    )
+    private val suffixes = listOf("Hospital", "Medical Center")
 
     init {
         for (i in 0 until n * n) {
@@ -102,13 +111,28 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
                 if (used.add(key(s))) return s
             }
         }
+        val usedNames = HashSet<String>()
         station = pick()
         for (lv in Levels.hospitals[level - 1][idx]) {
             val s = pick()
-            hospitals.add(Hospital(s, lv))
+            hospitals.add(Hospital(s, lv, genName(usedNames)))
             hospKey[key(s)] = lv
         }
         call = pick()
+    }
+
+    private fun genName(used: HashSet<String>): String {
+        var name: String
+        do {
+            val suffix = suffixes[rnd.nextInt(suffixes.size)]
+            name = if (rnd.nextInt(100) < 35) {
+                saints[rnd.nextInt(saints.size)] + " " + suffix
+            } else {
+                val pre = if (rnd.nextInt(100) < 15) prefixes[rnd.nextInt(prefixes.size)] + " " else ""
+                pre + roots[rnd.nextInt(roots.size)] + " " + suffix
+            }
+        } while (!used.add(name))
+        return name
     }
 
     private fun roadQuality(): Int {
