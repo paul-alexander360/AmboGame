@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +62,8 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
     var zm by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var sz by remember { mutableStateOf(IntSize.Zero) }
+    var lastTapT by remember { mutableLongStateOf(0L) }
+    var lastTapP by remember { mutableStateOf(Offset.Zero) }
     LaunchedEffect(rs.version, rs.stage, sz) {
         if (sz.width > 0) {
             val w = sz.width.toFloat()
@@ -104,11 +107,15 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                     )
                     var tracing = !rs.done && (m0 - last).getDistance() < 34f
                     if (tracing) rs.begin()
+                    var moved = false
+                    var lastT = down.uptimeMillis
                     do {
                         val ev = awaitPointerEvent()
+                        lastT = ev.changes[0].uptimeMillis
                         val pressed = ev.changes.count { it.pressed }
                         if (pressed >= 2) {
                             tracing = false
+                            moved = true
                             val pr = ev.changes.filter { it.pressed }
                             var sx = 0f
                             var sy = 0f
@@ -138,6 +145,7 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                             ev.changes.forEach { it.consume() }
                         } else if (pressed == 1) {
                             val chg = ev.changes.first { it.pressed }
+                            if ((chg.position - down.position).getDistance() > 12f) moved = true
                             if (tracing) {
                                 val mp = (chg.position - mapOrigin(cty, w, h, s0, zm, pan)) / (s0 * zm)
                                 var best = -1
@@ -156,6 +164,21 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                             chg.consume()
                         }
                     } while (ev.changes.any { it.pressed })
+                    if (!moved && lastT - down.uptimeMillis < 300L) {
+                        if (lastT - lastTapT < 350L && (down.position - lastTapP).getDistance() < 60f) {
+                            val tp = (down.position - mapOrigin(cty, w, h, s0, zm, pan)) / (s0 * zm)
+                            for (hh in cty.hospitals) {
+                                if (hypot(tp.x - cty.slotX(hh.slot), tp.y - cty.slotY(hh.slot)) < 16f) {
+                                    rs.showHospital(hh)
+                                    break
+                                }
+                            }
+                            lastTapT = 0L
+                        } else {
+                            lastTapT = lastT
+                            lastTapP = down.position
+                        }
+                    }
                 }
             }
     ) {
