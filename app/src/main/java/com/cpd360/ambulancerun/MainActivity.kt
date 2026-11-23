@@ -81,12 +81,20 @@ private fun NavBtn(kind: Int, onClick: () -> Unit) {
                 0 -> {
                     drawRoundRect(Color(0xFFE53935), Offset(s * 0.1f, s * 0.12f), Size(s * 0.8f, s * 0.78f), r)
                     val sc = Offset(s * 0.5f, s * 0.46f)
-                    drawCircle(Color.White, s * 0.24f, sc)
+                    drawCircle(Color.White, s * 0.34f, sc)
+                    val rr = s * 0.27f
+                    val bw = rr * 0.51f
                     for (a in floatArrayOf(0f, 60f, 120f)) {
                         rotate(a, sc) {
-                            drawLine(Color(0xFF1E6FE0), Offset(s * 0.32f, s * 0.46f), Offset(s * 0.68f, s * 0.46f), s * 0.07f, StrokeCap.Round)
+                            drawRect(Color(0xFF0A72B8), Offset(sc.x - bw / 2f, sc.y - rr), Size(bw, 2f * rr))
                         }
                     }
+                    drawRoundRect(Color.White, Offset(sc.x - rr * 0.07f, sc.y - rr * 0.85f), Size(rr * 0.14f, rr * 1.7f), CornerRadius(rr * 0.07f, rr * 0.07f))
+                    val sn = Path()
+                    sn.moveTo(sc.x - rr * 0.2f, sc.y - rr * 0.6f)
+                    sn.cubicTo(sc.x + rr * 0.4f, sc.y - rr * 0.5f, sc.x + rr * 0.4f, sc.y - rr * 0.1f, sc.x, sc.y - rr * 0.05f)
+                    sn.cubicTo(sc.x - rr * 0.4f, sc.y, sc.x - rr * 0.4f, sc.y + rr * 0.4f, sc.x + rr * 0.2f, sc.y + rr * 0.5f)
+                    drawPath(sn, Color.White, style = Stroke(rr * 0.12f, cap = StrokeCap.Round))
                 }
                 1 -> {
                     drawCircle(Color(0x553FA2FF), s * 0.48f, c)
