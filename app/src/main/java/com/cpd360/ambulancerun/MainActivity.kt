@@ -1,6 +1,7 @@
 package com.cpd360.ambulancerun
 
 import android.os.Bundle
+import kotlinx.coroutines.delay
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -137,6 +139,16 @@ fun HomeScreen(version: String) {
             .background(Color(0xFF9BD468))
     ) {
         CityMap(rs, Modifier.fillMaxSize())
+        val pop = rs.popup
+        if (pop != null) {
+            LaunchedEffect(pop) {
+                delay(4000)
+                rs.popup = null
+            }
+            Box(Modifier.align(Alignment.Center)) {
+                HospitalPopup(pop) { rs.popup = null }
+            }
+        }
         Column(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
