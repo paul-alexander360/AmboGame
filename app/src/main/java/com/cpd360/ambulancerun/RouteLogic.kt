@@ -18,6 +18,10 @@ fun rating(user: Double, fast: Double): Int {
     return if (r <= 1.05) 0 else if (r <= 1.25) 1 else if (r <= 1.6) 2 else 3
 }
 
+// Pedestrian and car accidents are turned off while their frequency is balanced.
+// Set to true to turn them back on.
+const val ACCIDENTS_ON = false
+
 fun creditFor(grade: Int): Int = when (grade) {
     0 -> 50
     1 -> 35
@@ -34,6 +38,7 @@ class RouteState(val player: PlayerData) {
     var stage by mutableIntStateOf(0)
     val path = mutableStateListOf<Int>()
     var done by mutableStateOf(false)
+    var driveShown by mutableStateOf(false)
     var started by mutableStateOf(false)
     var leg1User by mutableStateOf(0.0)
     var leg1Fast by mutableStateOf(0.0)
@@ -55,7 +60,16 @@ class RouteState(val player: PlayerData) {
         val c = CityData(l, i, Random.nextLong())
         c.drv = player.drive
         c.heavy = player.heavyBonus
+        c.cross = player.crossK
         return c
+    }
+
+    // Call after upgrades so the current city uses the new values
+    fun applyPlayer() {
+        city.drv = player.drive
+        city.heavy = player.heavyBonus
+        city.cross = player.crossK
+        version++
     }
 
     private fun focus(x: Float, y: Float) {
@@ -95,6 +109,29 @@ class RouteState(val player: PlayerData) {
         return Offset(city.accX(h.slot), city.accY(h.slot))
     }
 
+    // Key of the building the current leg drives to, for the drive scene marker
+    fun destKey(): Int {
+        if (stage == 0) return city.key(city.call)
+        val h = reached ?: return -1
+        return city.key(h.slot)
+    }
+
+    // Where the drive scene ends: the end of the leg, or the middle of the crash block
+    fun driveEnd(): Offset {
+        if (accSeg >= 1 && accSeg < path.size) {
+            val a = path[accSeg - 1]
+            val b = path[accSeg]
+            val m = city.m
+            return Offset(
+                (city.nodeX(a % m) + city.nodeX(b % m)) / 2f,
+                (city.nodeY(a / m) + city.nodeY(b / m)) / 2f
+            )
+        }
+        return endPt()
+    }
+
+    fun driveNodes(): List<Int> = if (accSeg >= 1 && accSeg < path.size) path.subList(0, accSeg).toList() else path.toList()
+
     fun correct(): List<Hospital> = city.hospitals.filter { patient.okAt(it.level) }
 
     fun starts(): IntArray = city.startNodes(startSlot())
@@ -129,6 +166,7 @@ class RouteState(val player: PlayerData) {
         stage = 0
         path.clear()
         done = false
+        driveShown = false
         started = false
         reached = null
         accSeg = -1
@@ -198,6 +236,7 @@ class RouteState(val player: PlayerData) {
         stage = 1
         path.clear()
         done = false
+        driveShown = false
         started = false
         reached = null
         version++
@@ -218,6 +257,7 @@ class RouteState(val player: PlayerData) {
         accSeg = -1
         accType = ""
         loop@ for (k in 1 until path.size) {
+            if (!ACCIDENTS_ON) break
             val a = path[k - 1]
             val b = path[k]
             for (type in 0..1) {
