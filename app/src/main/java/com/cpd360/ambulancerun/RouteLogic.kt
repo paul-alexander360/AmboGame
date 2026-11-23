@@ -22,11 +22,17 @@ fun rating(user: Double, fast: Double): Int {
 // Set to true to turn them back on.
 const val ACCIDENTS_ON = false
 
-fun creditFor(grade: Int): Int = when (grade) {
+// Grades: 0 A, 1 B, 2 C, 3 F, -1 N/A
+val gradeNames = listOf("A", "B", "C", "F")
+
+fun gradeName(g: Int): String = if (g < 0) "N/A" else gradeNames[g.coerceIn(0, 3)]
+
+// Experience (and credits) for one section of the run. F and N/A give nothing.
+fun xpFor(grade: Int): Int = when (grade) {
     0 -> 50
     1 -> 35
     2 -> 20
-    else -> 10
+    else -> 0
 }
 
 class RouteState(val player: PlayerData) {
@@ -50,6 +56,12 @@ class RouteState(val player: PlayerData) {
     var runOver by mutableStateOf(false)
     var failReason by mutableStateOf("")
     var earned by mutableIntStateOf(0)
+    var gTo by mutableIntStateOf(-1)
+    var gExam by mutableIntStateOf(-1)
+    var gHosp by mutableIntStateOf(-1)
+    var nTo by mutableStateOf("")
+    var nExam by mutableStateOf("")
+    var nHosp by mutableStateOf("")
     private var awarded = false
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
@@ -175,7 +187,15 @@ class RouteState(val player: PlayerData) {
         failReason = ""
         earned = 0
         awarded = false
+        gTo = -1
+        gExam = -1
+        gHosp = -1
+        nTo = ""
+        nExam = ""
+        nHosp = ""
     }
+
+    fun passed(): Boolean = gTo != 3 && gExam != 3 && gHosp != 3
 
     fun reset() {
         resetRun()
@@ -214,21 +234,21 @@ class RouteState(val player: PlayerData) {
     }
 
     fun examDone() {
-        if (patient.dead) {
+        val p = patient
+        if (p.dead || (p.kind == ARREST && !p.treated[3])) {
+            gExam = 3
+            nExam = if (p.dead) "patient died" else "needed CPR"
             runOver = true
-            failReason = "Patient did not survive"
-            award(creditFor(leg1Grade))
+            failReason = if (p.dead) "Patient did not survive" else "Patient needed CPR"
+            award()
             version++
             return
         }
-        val miss = patient.missing()
-        if (miss != "") {
-            runOver = true
-            failReason = miss
-            award(0)
-            version++
-            return
-        }
+        val mt = p.missedTests()
+        val mx = p.missedTreats()
+        gExam = minOf(3, mt.size + mx.size)
+        val names = mt.map { testNames[it] } + mx.map { treatNames[it] }
+        nExam = if (names.isEmpty()) "nothing missed" else "missed: " + names.joinToString(", ")
         startHospital()
     }
 
@@ -242,9 +262,10 @@ class RouteState(val player: PlayerData) {
         version++
     }
 
-    private fun award(c: Int) {
+    private fun award() {
         if (awarded) return
         awarded = true
+        val c = xpFor(gTo) + xpFor(gExam) + xpFor(gHosp)
         earned = c
         player.credits += c
         player.totalXp += c
@@ -282,15 +303,25 @@ class RouteState(val player: PlayerData) {
         if (accSeg >= 0) fail = "Accident with a " + accType
         else if (wrongHospital()) fail = "Wrong hospital"
         else if (user > fast * 1.6) fail = "Too slow"
+        val g = if (fail != "") 3 else grade
+        val note = if (accSeg >= 0) "accident" else if (wrongHospital()) "wrong hospital"
+            else fmt(user) + " (best " + fmt(fast) + ")"
+        if (stage == 0) {
+            gTo = g
+            nTo = note
+        } else {
+            gHosp = g
+            nHosp = note
+        }
         if (fail != "") {
             runOver = true
             failReason = fail
-            award(0)
+            award()
             return
         }
         if (stage == 1) {
             runOver = true
-            award(creditFor(leg1Grade) + creditFor(grade))
+            award()
         }
     }
 
