@@ -174,7 +174,7 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
     val body: String
     if (rs.kitNeeded()) {
         title = "City 5 cleared!"
-        body = "Buy the Level " + (rs.level + 1) + " kit to move on to Level " + (rs.level + 1) + "."
+        body = "See $DR_NAME to learn the Level " + (rs.level + 1) + " skills and move on to Level " + (rs.level + 1) + "."
     } else if (rs.cityCleared()) {
         title = "Every city cleared!"
         body = "Keep running calls for credits and upgrades."
@@ -235,7 +235,7 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Medical kit", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("See $DR_NAME", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
