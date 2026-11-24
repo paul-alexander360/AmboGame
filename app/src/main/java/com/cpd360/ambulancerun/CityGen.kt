@@ -296,6 +296,30 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return if (v.isEmpty()) 0.0 else v.average()
     }
 
+    // Average traffic of the blocks beside a road piece, 0.1 (quiet) to 1.0 (busiest)
+    fun segTraffic(a: Int, b: Int): Double {
+        val i1 = a % m
+        val j1 = a / m
+        val i2 = b % m
+        val j2 = b / m
+        val list: List<Double?> = if (j1 == j2) {
+            val i = minOf(i1, i2)
+            listOf(blockTraffic(i, j1 - 1), blockTraffic(i, j1))
+        } else {
+            val j = minOf(j1, j2)
+            listOf(blockTraffic(i1 - 1, j), blockTraffic(i1, j))
+        }
+        val v = list.filterNotNull()
+        return if (v.isEmpty()) 0.1 else v.average()
+    }
+
+    // Traffic multiplier for a road piece: 1x on the quietest blocks up to 3x on the busiest
+    fun segMult(a: Int, b: Int): Double = 1.0 + 2.0 * ((segTraffic(a, b) - 0.1) / 0.9).coerceIn(0.0, 1.0)
+
+    // Accident chance for one road piece before skills. The base shrinks as cities grow,
+    // so a normal run (both legs) adds up to about 5% in any city.
+    fun segCrash(a: Int, b: Int): Double = 0.02 / m * segMult(a, b)
+
     fun accidentChance(x: Double, z: Double, s: Double, l: Double): Double {
         val c = 0.07 * (1.0 + x + distraction - (z + s + l))
         return Math.round(maxOf(0.01, c) * 1000.0) / 1000.0
