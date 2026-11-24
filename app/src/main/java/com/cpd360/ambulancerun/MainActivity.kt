@@ -174,6 +174,14 @@ fun HomeScreen(version: String, player: PlayerData) {
             }
             return
         }
+        7 -> {
+            TestToolsScreen(player, rs) { screen = 0 }
+            return
+        }
+        8 -> {
+            HeartsShopScreen(player, { screen = 0 }) { screen = 2 }
+            return
+        }
         6 -> {
             DrScreen(player, rs.level, rs.kitNeeded(), {
                 if (rs.buyKit()) screen = 0
@@ -245,7 +253,7 @@ fun HomeScreen(version: String, player: PlayerData) {
         }
         // Bottom: only shows once a route is finished.
         if (rs.done && !rs.checking) {
-            val user = rs.city.pathTime(rs.path.toList())
+            val user = rs.userTime(rs.path.toList())
             val rt = rating(user, fast)
             val names = listOf("Green", "Yellow", "Orange", "Red")
             val cols = listOf(Color(0xFF6FAE3E), Color(0xFFD9A93A), Color(0xFFF29A2E), RouteRed)
@@ -310,11 +318,13 @@ fun HomeScreen(version: String, player: PlayerData) {
                     3 -> rs.reset()
                     4 -> rs.nextCity()
                     5 -> screen = 6
+                    6 -> screen = 7
+                    7 -> screen = 8
                 }
             }
         }
         if (rs.runOver && rs.driveShown && rs.gTo >= 0) {
-            GradeCard(rs, { rs.nextRun() }) { screen = 6 }
+            GradeCard(rs, { rs.nextRun() }, { screen = 6 }) { screen = 8 }
         }
         // Dot: first-time tips, then the call card at the start of each run
         if (!menu) {
@@ -522,17 +532,32 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             }
         }
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile("CREDITS", Modifier.weight(1f)) {
-                Coin(16)
-                Spacer(Modifier.width(5.dp))
-                Text("%,d".format(player.credits), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StatTile("CREDITS", Modifier.weight(1.25f)) {
+                Coin(14)
+                Spacer(Modifier.width(4.dp))
+                Text("%,d".format(player.credits), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
-            StatTile("DRIVER RATING", Modifier.weight(1f)) {
-                Text("%.2f".format(player.drive), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            StatTile("HEARTS", Modifier.weight(1f)) {
+                HeartAmount(player.hearts, HeartSoft, 15, 15)
+            }
+            StatTile("RATING", Modifier.weight(0.85f)) {
+                Text("%.2f".format(player.drive), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
         }
         Spacer(Modifier.height(12.dp))
+        DrawerItem("Hearts shop", "Get and spend Hearts", {
+            val w = size.width
+            val h = size.height
+            val p = Path()
+            p.moveTo(w * 0.5f, h * 0.86f)
+            p.cubicTo(w * 0.14f, h * 0.6f, w * 0.06f, h * 0.38f, w * 0.18f, h * 0.24f)
+            p.cubicTo(w * 0.3f, h * 0.1f, w * 0.46f, h * 0.14f, w * 0.5f, h * 0.3f)
+            p.cubicTo(w * 0.54f, h * 0.14f, w * 0.7f, h * 0.1f, w * 0.82f, h * 0.24f)
+            p.cubicTo(w * 0.94f, h * 0.38f, w * 0.86f, h * 0.6f, w * 0.5f, h * 0.86f)
+            p.close()
+            drawPath(p, HeartRed)
+        }) { onPick(7) }
         DrawerItem("Ambulance", "Paint and upgrades", {
             val sc = size.width / 1780f
             translate(0f, size.height / 2f - 440f * sc) { scale(sc, Offset.Zero) { ambulanceSide(player.ambColor) } }
@@ -563,6 +588,16 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                 .background(GlassLine)
         )
         Text("TESTING", color = Color(0xFF8E92C4), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Spacer(Modifier.height(4.dp))
+        DrawerItem("Test tools", "Credits, level, jump to city", {
+            // Wrench: a handle and an open ring at the top
+            val w = size.width
+            rotate(45f, Offset(w / 2f, w / 2f)) {
+                drawRoundRect(Color.White, Offset(w * 0.43f, w * 0.38f), Size(w * 0.14f, w * 0.55f), CornerRadius(w * 0.07f))
+                drawCircle(Color.White, w * 0.2f, Offset(w / 2f, w * 0.28f))
+                drawRect(Color(0xFF585C84), Offset(w * 0.44f, w * 0.04f), Size(w * 0.12f, w * 0.22f))
+            }
+        }) { onPick(6) }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TestBtn("Test again", rs.done, Modifier.weight(1f)) { onPick(3) }
