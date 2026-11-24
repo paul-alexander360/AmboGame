@@ -588,6 +588,17 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
             route.lineTo(ep.x, ep.y)
         }
         val rst = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
+        // Orange glow under road pieces beside busy blocks
+        for (q in 1 until lim) {
+            val a = rs.path[q - 1]
+            val b = rs.path[q]
+            if (c.segMult(a, b) >= 2.0) {
+                drawLine(
+                    Color(0xFFFF9F1C), Offset(c.nodeX(a % c.m), c.nodeY(a / c.m)), Offset(c.nodeX(b % c.m), c.nodeY(b / c.m)),
+                    14f, StrokeCap.Round, alpha = 0.6f
+                )
+            }
+        }
         drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rst(9f))
         translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rst(6f)) }
         drawPath(route, Color(0xFF2E7BFF), style = rst(6f))
