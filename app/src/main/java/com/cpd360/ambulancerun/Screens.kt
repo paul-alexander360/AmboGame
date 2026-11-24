@@ -435,6 +435,26 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
             }
         }
         WhiteCard {
+            Text("Tips", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
+            Text("Dot and $DR_NAME explain each step the first time it comes up.", fontSize = 11.sp, color = MuteText)
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (player.tipsSeen.isEmpty()) SoftFill else GlassSolid)
+                    .clickable(enabled = player.tipsSeen.isNotEmpty()) { player.replayTips() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "Replay tips",
+                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    color = if (player.tipsSeen.isEmpty()) MuteText else Color.White
+                )
+            }
+        }
+        WhiteCard {
             Text("Player", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
             Text("Level " + player.level + "   XP " + player.totalXp + "   Credits " + "%,d".format(player.credits), fontSize = 13.sp, color = MuteText)
         }
@@ -442,7 +462,7 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
     }
 }
 
-// One kit on the Medical kit page. state: 0 owned, 1 next (buyable when canBuy), 2 later
+// One lesson on Dr. Ray's page. state: 0 learned, 1 next (buyable when canBuy), 2 later
 @Composable
 private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: () -> Unit) {
     val i = lv - 1
@@ -478,7 +498,7 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
                     .background(Color(0xFF6FAE3E), RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text("OWNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("LEARNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
             else -> Row(
                 modifier = Modifier
@@ -501,11 +521,17 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
     }
 }
 
-// Medical kit page. level is the level you are on; ready is true once City 5 of that level is cleared.
+// Dr. Ray's page: the lessons that teach each level's tests and treatments.
+// level is the level you are on; ready is true once City 5 of that level is cleared.
 @Composable
-fun KitScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit, onBack: () -> Unit) {
-    Page("Medical kit", player, onBack) {
-        SectionTitle("Your kit")
+fun DrScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit, onBack: () -> Unit) {
+    Page(DR_NAME, player, onBack) {
+        val bubble = if (level >= MAX_LEVEL) "You've learned everything I know. Great work!"
+            else if (!ready) "Clear City 5 and I'll teach you the next skills."
+            else if (player.credits < kitCost(level + 1)) "Ready when you are. Earn a few more credits first."
+            else "You're ready for Level " + (level + 1) + "!"
+        GuideScene(true, bubble, Modifier.fillMaxWidth().height(150.dp))
+        SectionTitle("You've learned")
         for (lv in 1..level) KitCard(lv, 0, false, "") { }
         if (level < MAX_LEVEL) {
             val next = level + 1
@@ -513,15 +539,11 @@ fun KitScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit,
             val note = if (!ready) "Clear City 5 of Level $level to unlock."
                 else if (player.credits < cost) "%,d".format(cost - player.credits) + " more credits needed."
                 else "Opens Level $next cities."
-            SectionTitle("Next level")
+            SectionTitle("Next lesson")
             KitCard(next, 1, ready && player.credits >= cost, note) { onBuy() }
             if (next < MAX_LEVEL) {
                 SectionTitle("Later")
                 for (lv in next + 1..MAX_LEVEL) KitCard(lv, 2, false, "") { }
-            }
-        } else {
-            WhiteCard {
-                Text("You have every kit.", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
             }
         }
     }
