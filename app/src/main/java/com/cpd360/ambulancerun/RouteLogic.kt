@@ -159,8 +159,20 @@ class RouteState(val player: PlayerData) {
         return l.toIntArray()
     }
 
+    // Road corners beside a wrong hospital. Driving through one ends the leg there, so the target route avoids them.
+    fun avoid(): IntArray {
+        if (stage == 0) return IntArray(0)
+        val l = ArrayList<Int>()
+        for (h in city.hospitals) if (!patient.okAt(h.level)) for (g in city.goalNodes(h.slot)) l.add(g)
+        return l.toIntArray()
+    }
+
     // Target time: the standard medic's best route for this level
-    fun fastest(): Double = city.fastest(starts(), goals(), true)
+    // If avoiding wrong hospitals leaves no way through, fall back to the plain best route.
+    fun fastest(): Double {
+        val t = city.fastest(starts(), goals(), true, avoid())
+        return if (t < Double.MAX_VALUE) t else city.fastest(starts(), goals(), true)
+    }
 
     // Chance of an accident on the route drawn so far, after skills and upgrades
     fun routeRisk(): Double {
@@ -336,7 +348,7 @@ class RouteState(val player: PlayerData) {
             leg1Fast = fast
             leg1Grade = grade
             fastPath.clear()
-            fastPath.addAll(city.fastestPath(starts(), goals(), true))
+            fastPath.addAll(city.fastestPath(starts(), goals(), true, avoid()))
             checking = fastPath.isNotEmpty()
         }
         var fail = ""
