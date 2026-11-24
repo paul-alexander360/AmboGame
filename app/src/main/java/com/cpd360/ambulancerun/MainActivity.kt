@@ -250,11 +250,11 @@ fun HomeScreen(version: String, player: PlayerData) {
                     color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold
                 )
                 if (rs.stage == 1) {
-                    Text("To the call " + fmt(rs.leg1User) + "   Fastest " + fmt(rs.leg1Fast), color = GlassMute, fontSize = 14.sp)
+                    Text("To the call " + fmt(rs.leg1User) + "   Target " + fmt(rs.leg1Fast), color = GlassMute, fontSize = 14.sp)
                 }
                 if (rs.accSeg < 0) {
                     Text(
-                        (if (rs.stage == 1) "To the hospital " else "Your time ") + fmt(user) + "   Fastest " + fmt(fast),
+                        (if (rs.stage == 1) "To the hospital " else "Your time ") + fmt(user) + "   Target " + fmt(fast),
                         color = GlassMute, fontSize = 14.sp
                     )
                     Spacer(Modifier.height(8.dp))
