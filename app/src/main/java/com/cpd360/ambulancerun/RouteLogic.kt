@@ -18,9 +18,9 @@ fun rating(user: Double, fast: Double): Int {
     return if (r <= 1.05) 0 else if (r <= 1.25) 1 else if (r <= 1.6) 2 else 3
 }
 
-// Pedestrian and car accidents are turned off while their frequency is balanced.
-// Set to true to turn them back on.
-const val ACCIDENTS_ON = false
+// Pedestrian and car accidents. Each road piece gets one small roll set by its traffic.
+// Set to false to turn them off.
+const val ACCIDENTS_ON = true
 
 // Grades: 0 A, 1 B, 2 C, 3 F, -1 N/A
 val gradeNames = listOf("A", "B", "C", "F")
@@ -157,6 +157,13 @@ class RouteState(val player: PlayerData) {
     }
 
     fun fastest(): Double = city.fastest(starts(), goals())
+
+    // Chance of an accident on the route drawn so far, after skills and upgrades
+    fun routeRisk(): Double {
+        var safe = 1.0
+        for (k in 1 until path.size) safe *= 1.0 - city.segCrash(path[k - 1], path[k]) * player.riskMult
+        return 1.0 - safe
+    }
 
     fun wrongHospital(): Boolean {
         val h = reached
@@ -305,16 +312,14 @@ class RouteState(val player: PlayerData) {
             if (!ACCIDENTS_ON) break
             val a = path[k - 1]
             val b = path[k]
-            for (type in 0..1) {
-                val ped = type == 0
-                val x = city.segRisk(a, b, ped)
-                val s = 0.1 * (if (ped) player.pedBonus else player.mvcBonus)
-                val chance = city.accidentChance(x, player.ambAvoid, s, player.avoidance)
-                if (Random.nextDouble() < chance && Random.nextDouble() >= player.dodge) {
-                    accSeg = k
-                    accType = if (ped) "pedestrian" else "car crash"
-                    break@loop
-                }
+            if (Random.nextDouble() < city.segCrash(a, b) * player.riskMult) {
+                // Pedestrian or car crash, weighted by what this block is like
+                val pr = city.segRisk(a, b, true)
+                val cr = city.segRisk(a, b, false)
+                val ped = Random.nextDouble() * (pr + cr) < pr
+                accSeg = k
+                accType = if (ped) "pedestrian" else "car crash"
+                break@loop
             }
         }
         val grade = rating(user, fast)
