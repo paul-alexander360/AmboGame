@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,35 +50,52 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val PageBg = Color(0xFFA9ADE3)
-val HeaderOrange = Color(0xFFFF6A3D)
-val InkText = Color(0xFF2B313A)
-val MuteText = Color(0xFF5B6085)
-val GoGreen = listOf(Color(0xFF9BF076), Color(0xFF4DC43B))
-val GoBorder = Color(0xFFF6A12B)
-val LockGrey = listOf(Color(0xFFD3D5F0), Color(0xFFA9ABD6))
+// Dispatch look. Colors are taken from the city map: the road lavender (deepened for panels),
+// the route red, the park green and the call-glow yellow.
+val Glass = Color(0xEB3B3F6E)
+val GlassSolid = Color(0xFF3B3F6E)
+val GlassLine = Color(0x26FFFFFF)
+val GlassMute = Color(0xFFC3C6EE)
+val RouteRed = Color(0xFFE53935)
+val ParkGreen = Color(0xFF8FCB59)
+val CallYellow = Color(0xFFFFE66B)
+val PageBg = Color(0xFFEEEFFA)
+val InkText = Color(0xFF2B2F4A)
+val MuteText = Color(0xFF7378A0)
+val CardLine = Color(0xFFE1E3F3)
+val SoftFill = Color(0xFFEDEEFA)
+
+@Composable
+fun Coin(sizeDp: Int) {
+    Box(
+        modifier = Modifier
+            .size(sizeDp.dp)
+            .background(Color(0xFFFFC94D), CircleShape)
+            .border(1.5.dp, Color(0xFFE09B00), CircleShape)
+    )
+}
 
 @Composable
 fun ScreenHeader(title: String, credits: Int, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(HeaderOrange, RoundedCornerShape(24.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .background(GlassSolid, RoundedCornerShape(18.dp))
+            .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(CircleShape)
-                .background(Color(0x33FFFFFF))
+                .clip(RoundedCornerShape(12.dp))
+                .background(GlassLine)
                 .clickable { onBack() },
             contentAlignment = Alignment.Center
         ) {
-            Text("←", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("‹", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.width(10.dp))
-        Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(12.dp))
+        Text(title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         CreditPill(credits)
     }
 }
@@ -85,19 +103,12 @@ fun ScreenHeader(title: String, credits: Int, onBack: () -> Unit) {
 @Composable
 fun CreditPill(credits: Int) {
     Row(
-        modifier = Modifier
-            .background(Color(0xFFFFF3E0), RoundedCornerShape(12.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier = Modifier.padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.size(16.dp).background(Color(0xFFFFC107), CircleShape).border(1.5.dp, Color(0xFFBF8600), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("$", color = Color(0xFF7A5200), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.width(5.dp))
-        Text("%,d".format(credits), color = Color(0xFFBF360C), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Coin(18)
+        Spacer(Modifier.width(6.dp))
+        Text("%,d".format(credits), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -107,8 +118,9 @@ fun WhiteCard(content: @Composable ColumnScope.() -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(16.dp))
+            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content
     )
 }
@@ -116,8 +128,8 @@ fun WhiteCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 fun SectionTitle(t: String) {
     Text(
-        t, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.fillMaxWidth().padding(top = 4.dp), textAlign = TextAlign.Center
+        t.uppercase(), color = MuteText, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp,
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 6.dp)
     )
 }
 
@@ -127,13 +139,15 @@ fun Swatch(c: Color, selected: Boolean, locked: Boolean = false, lockLabel: Stri
         Box(
             modifier = Modifier
                 .size(40.dp)
+                .border(if (selected) 2.5.dp else 0.dp, if (selected) InkText else Color.Transparent, CircleShape)
+                .padding(4.dp)
                 .clip(CircleShape)
-                .background(if (locked) LockGrey[1] else c)
-                .border(if (selected) 4.dp else 2.dp, if (selected) GoBorder else Color(0xFF9A9CC8), CircleShape)
+                .background(if (locked) SoftFill else c)
+                .border(1.dp, CardLine, CircleShape)
                 .clickable(enabled = !locked) { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            if (locked) Text("🔒", fontSize = 14.sp)
+            if (locked) Text("🔒", fontSize = 13.sp)
             else if (selected) Text("✓", color = if (c.red + c.green + c.blue > 2.2f) InkText else Color.White, fontWeight = FontWeight.Bold)
         }
         if (lockLabel != "") Text(lockLabel, fontSize = 9.sp, color = MuteText, textAlign = TextAlign.Center)
@@ -144,13 +158,10 @@ fun Swatch(c: Color, selected: Boolean, locked: Boolean = false, lockLabel: Stri
 fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .background(
-                Brush.verticalGradient(if (selected) GoGreen else listOf(Color(0xFFF2F3FB), Color(0xFFE2E4F5))),
-                RoundedCornerShape(14.dp)
-            )
-            .border(2.dp, if (selected) GoBorder else Color(0xFFC9CCEA), RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) GlassSolid else SoftFill)
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 7.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selected) Color.White else InkText)
     }
@@ -158,7 +169,7 @@ fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun LabeledRow(label: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, fontSize = 12.sp, color = MuteText, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) { content() }
     }
@@ -173,50 +184,58 @@ fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: 
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White, RoundedCornerShape(16.dp))
-            .padding(10.dp),
+            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF2AA2FF), Color(0xFF0B4FB8))))
-                .border(2.dp, Color(0xFF0B5BD3), RoundedCornerShape(12.dp)),
+                .size(44.dp)
+                .background(SoftFill, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(glyph, fontSize = if (glyph.length > 2) 13.sp else 22.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(glyph, fontSize = if (glyph.length > 2) 13.sp else 20.sp, color = GlassSolid, fontWeight = FontWeight.Bold)
         }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText, modifier = Modifier.weight(1f))
+                Text("Lv $level/$MAX_UP", fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold)
+            }
             Text(desc, fontSize = 11.sp, color = MuteText)
-            if (extra != "") Text(extra, fontSize = 11.sp, color = Color(0xFFBF360C), fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (extra != "") Text(extra, fontSize = 11.sp, color = RouteRed, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 for (i in 0 until MAX_UP) {
                     Box(
                         Modifier
-                            .size(width = 18.dp, height = 8.dp)
-                            .background(if (i < level) Color(0xFF4DC43B) else Color(0xFFE0E2F2), RoundedCornerShape(4.dp))
+                            .weight(1f)
+                            .height(5.dp)
+                            .background(if (i < level) RouteRed else SoftFill, RoundedCornerShape(3.dp))
                     )
                 }
-                Spacer(Modifier.width(4.dp))
-                Text("Lv $level", fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold)
             }
         }
-        Spacer(Modifier.width(8.dp))
-        Column(
-            modifier = Modifier
-                .width(76.dp)
-                .background(Brush.verticalGradient(if (canBuy) GoGreen else LockGrey), RoundedCornerShape(14.dp))
-                .border(2.dp, if (canBuy) GoBorder else Color(0xFF9A9CC8), RoundedCornerShape(14.dp))
-                .clickable(enabled = canBuy) { onBuy() }
-                .padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (maxed) {
-                Text("MAX", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            } else {
-                Text("Upgrade", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (canBuy) Color.White else MuteText)
+        Spacer(Modifier.width(10.dp))
+        if (maxed) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF6FAE3E), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Text("MAX", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (canBuy) GlassSolid else SoftFill)
+                    .clickable(enabled = canBuy) { onBuy() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Coin(14)
+                Spacer(Modifier.width(5.dp))
                 Text("%,d".format(cost), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (canBuy) Color.White else MuteText)
             }
         }
@@ -232,7 +251,7 @@ private fun Page(title: String, player: PlayerData, onBack: () -> Unit, content:
             .background(PageBg)
             .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
-            .padding(8.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ScreenHeader(title, player.credits, onBack)
@@ -247,14 +266,15 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF3E2A9), RoundedCornerShape(18.dp))
+                .background(Color.White, RoundedCornerShape(18.dp))
+                .border(1.dp, CardLine, RoundedCornerShape(18.dp))
                 .padding(8.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Brush.verticalGradient(listOf(Color(0xFFFFF0C9), Color(0xFFFFE3A3))))
+                    .background(Brush.verticalGradient(listOf(Color(0xFFF3F4FC), Color(0xFFDCDFF5))))
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -268,7 +288,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                     Text(player.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = InkText)
                     Text("Paramedic, " + player.org, fontSize = 12.sp, color = MuteText)
                     Box(
-                        Modifier.background(HeaderOrange, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 3.dp)
+                        Modifier.background(RouteRed, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 3.dp)
                     ) {
                         Text("Level " + player.level, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
@@ -339,7 +359,8 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF3E2A9), RoundedCornerShape(18.dp))
+                .background(Color.White, RoundedCornerShape(18.dp))
+                .border(1.dp, CardLine, RoundedCornerShape(18.dp))
                 .padding(8.dp)
         ) {
             Canvas(
@@ -389,7 +410,10 @@ private fun SettingRow(title: String, desc: String, on: Boolean, onChange: (Bool
             Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
             Text(desc, fontSize = 11.sp, color = MuteText)
         }
-        Switch(checked = on, onCheckedChange = onChange)
+        Switch(
+            checked = on, onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF6FAE3E), checkedThumbColor = Color.White)
+        )
     }
 }
 
@@ -410,6 +434,6 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
             Text("Player", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
             Text("Level " + player.level + "   XP " + player.totalXp + "   Credits " + "%,d".format(player.credits), fontSize = 13.sp, color = MuteText)
         }
-        Text("Version $version", color = Color.White, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Text("Version $version", color = MuteText, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
