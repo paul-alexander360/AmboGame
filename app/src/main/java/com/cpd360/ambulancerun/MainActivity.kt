@@ -127,6 +127,8 @@ fun HomeScreen(version: String, player: PlayerData) {
     val guide = remember { GuideState() }
     when (screen) {
         1 -> {
+            // Back does nothing during the exam, so the run isn't lost. Tap To hospital! to leave.
+            BackHandler { }
             Box(Modifier.fillMaxSize()) {
                 ExamScreen(rs.patient, rs.level) {
                     rs.examDone()
