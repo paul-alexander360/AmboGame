@@ -35,6 +35,7 @@ const val RUNS_PER_CITY = 5
 
 fun kitCost(level: Int): Int = 500 * level
 
+// Each level's lesson from Dr. Ray: the tests and treatments that level unlocks
 val kitNames = listOf(
     "Basics", "Vitals", "Pulse ox + Oxygen", "Glucose test + Glucose",
     "Splint / Stop bleeding", "CPR", "Stroke test", "ECG + Shock"
@@ -78,6 +79,21 @@ class PlayerData(private val ctx: Context) {
     // Settings
     var sirenSound by mutableStateOf(true)
     var driveScenes by mutableStateOf(true)
+
+    // Guide tips already shown by Dot and Dr. Ray
+    val tipsSeen = mutableStateListOf<String>()
+
+    fun seen(k: String): Boolean = tipsSeen.contains(k)
+
+    fun markSeen(k: String) {
+        if (!tipsSeen.contains(k)) tipsSeen.add(k)
+        save()
+    }
+
+    fun replayTips() {
+        tipsSeen.clear()
+        save()
+    }
 
     val charUp = mutableStateListOf(0, 0, 0)
     val ambUp = mutableStateListOf(0, 0, 0, 0, 0, 0, 0)
@@ -149,6 +165,7 @@ class PlayerData(private val ctx: Context) {
             o.put("driveScenes", driveScenes)
             o.put("charUp", JSONArray(charUp.toList()))
             o.put("ambUp", JSONArray(ambUp.toList()))
+            o.put("tipsSeen", JSONArray(tipsSeen.toList()))
             val f = File(ctx.filesDir, "player.json")
             val t = File(ctx.filesDir, "player.tmp")
             t.writeText(o.toString())
@@ -192,6 +209,8 @@ class PlayerData(private val ctx: Context) {
             driveScenes = o.optBoolean("driveScenes", true)
             readList(o, "charUp", charUp)
             readList(o, "ambUp", ambUp)
+            val ts = o.optJSONArray("tipsSeen")
+            if (ts != null) for (i in 0 until ts.length()) tipsSeen.add(ts.optString(i))
             if (!o.has("charUp")) {
                 charUp[SKILL_PED] = o.optInt("ped", 0).coerceIn(0, MAX_UP)
                 charUp[SKILL_CRASH] = o.optInt("mvc", 0).coerceIn(0, MAX_UP)
