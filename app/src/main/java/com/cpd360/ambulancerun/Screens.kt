@@ -328,8 +328,10 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                 for (i in UniformCols.indices) Swatch(UniformCols[i], player.uniform == i) { player.uniform = i; player.save() }
             }
         }
+        SectionTitle("Speed")
+        SpeedCard(player)
         SectionTitle("Skills")
-        UpgradeCard("🚑", "Driving skill", "Faster drive times on every road.", player.charUp[SKILL_DRIVE], player.credits) {
+        UpgradeCard("🚑", "Driving skill", "Faster drive times on every road. About 1.3% faster per level.", player.charUp[SKILL_DRIVE], player.credits) {
             player.buyChar(SKILL_DRIVE)
         }
         UpgradeCard("🚶", "Pedestrian awareness", "Crash risk down 8% per level.", player.charUp[SKILL_PED], player.credits) {
@@ -342,12 +344,12 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
 }
 
 private val ambParts = listOf(
-    Triple("◎", "Tires", "Faster speed."),
-    Triple("⚙", "Engine", "Faster speed."),
+    Triple("◎", "Tires", "Faster speed. About 1% faster per level."),
+    Triple("⚙", "Engine", "Faster speed. About 1% faster per level."),
     Triple("▣", "Brakes", "Crash risk down 4% per level."),
     Triple("☀", "Lights", "Crash risk down 4% per level and quicker through intersections."),
     Triple("🔊", "Siren", "Crash risk down 4% per level and quicker through intersections."),
-    Triple("🚚", "Cab", "Faster speed."),
+    Triple("🚚", "Cab", "Faster speed. About 1% faster per level."),
     Triple("✚", "Patient compartment", "Needed to move up levels. Unlocks more tests, treatments and paint colors.")
 )
 
@@ -394,6 +396,8 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
                 }
             }
         }
+        SectionTitle("Speed")
+        SpeedCard(player)
         SectionTitle("Upgrades")
         for (k in ambParts.indices) {
             val (g, n, d) = ambParts[k]
@@ -520,5 +524,57 @@ fun KitScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit,
                 Text("You have every kit.", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
             }
         }
+    }
+}
+
+// How your speed compares with the standard medic of your current level
+@Composable
+fun SpeedCard(player: PlayerData) {
+    val lvl = player.cityLevel
+    val d = player.speedVsTarget(lvl)
+    val pct = Math.round(kotlin.math.abs(d) * 100.0).toInt()
+    val label = if (pct == 0) "On target" else if (d > 0) "$pct% slower than target" else "$pct% faster than target"
+    val col = if (pct == 0 || d < 0) Color(0xFF3F8F1F) else if (d < 0.1) Color(0xFFD9822B) else RouteRed
+    // The bar fills to the target line at 60% when you match it
+    val fill = (0.6f / (1f + d.toFloat())).coerceIn(0.05f, 1f)
+    WhiteCard {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Your speed", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText, modifier = Modifier.weight(1f))
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = col)
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(18.dp)
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .background(SoftFill, RoundedCornerShape(5.dp))
+            )
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxWidth(fill)
+                    .height(10.dp)
+                    .background(col, RoundedCornerShape(5.dp))
+            )
+            Row(Modifier.fillMaxWidth()) {
+                Spacer(Modifier.weight(0.6f))
+                Box(
+                    Modifier
+                        .width(3.dp)
+                        .height(18.dp)
+                        .background(InkText, RoundedCornerShape(2.dp))
+                )
+                Spacer(Modifier.weight(0.4f))
+            }
+        }
+        Text(
+            "The line is the Level $lvl target. Driving skill, Tires, Engine and Cab move you toward it.",
+            fontSize = 11.sp, color = MuteText
+        )
     }
 }
