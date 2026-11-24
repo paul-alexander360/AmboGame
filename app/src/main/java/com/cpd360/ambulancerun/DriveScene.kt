@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -1424,13 +1425,16 @@ fun DriveScene(
             }
         }
     }
+    // These only change when the block number changes or the drive ends, so the screen
+    // around the drawing isn't rebuilt every frame. Only the drawing reads t each frame.
+    val blocks = plan.pts.size - 1
+    val blockNo by remember(plan) { derivedStateOf { min(plan.camAt(plan.distAt(t)).seg + 1, blocks) } }
+    val arrived by remember(plan) { derivedStateOf { t > plan.total } }
     Box(Modifier.fillMaxSize().background(Color(0xFF1D2027))) {
         Canvas(Modifier.fillMaxSize()) {
             drawWorld(city, plan, t, destKey, crashAt, traffic, labels)
             drawCab(t, plan, plan.distAt(t), labels)
         }
-        val cam = plan.camAt(plan.distAt(t))
-        val blocks = plan.pts.size - 1
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -1443,7 +1447,7 @@ fun DriveScene(
                 if (toHospital) "Driving to the hospital" else "Driving to the call",
                 color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold
             )
-            Text("Block " + min(cam.seg + 1, blocks) + " of " + blocks, color = Color.White, fontSize = 13.sp)
+            Text("Block " + blockNo + " of " + blocks, color = Color.White, fontSize = 13.sp)
         }
         Box(
             modifier = Modifier
@@ -1456,7 +1460,7 @@ fun DriveScene(
         ) {
             Text("Skip ▸", color = InkText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
-        if (t > plan.total) {
+        if (arrived) {
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
