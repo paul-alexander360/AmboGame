@@ -42,6 +42,9 @@ class RouteState(val player: PlayerData) {
     var version by mutableIntStateOf(0)
     var stage by mutableIntStateOf(0)
     val path = mutableStateListOf<Int>()
+    // Route check after the drive to the call: the target's best route, and true while the map pauses to show it
+    val fastPath = mutableStateListOf<Int>()
+    var checking by mutableStateOf(false)
     var done by mutableStateOf(false)
     var driveShown by mutableStateOf(false)
     var started by mutableStateOf(false)
@@ -189,6 +192,8 @@ class RouteState(val player: PlayerData) {
         patient = Patient.make(level)
         stage = 0
         path.clear()
+        fastPath.clear()
+        checking = false
         done = false
         driveShown = false
         started = false
@@ -283,6 +288,8 @@ class RouteState(val player: PlayerData) {
     fun startHospital() {
         stage = 1
         path.clear()
+        fastPath.clear()
+        checking = false
         done = false
         driveShown = false
         started = false
@@ -328,6 +335,9 @@ class RouteState(val player: PlayerData) {
             leg1User = user
             leg1Fast = fast
             leg1Grade = grade
+            fastPath.clear()
+            fastPath.addAll(city.fastestPath(starts(), goals(), true))
+            checking = fastPath.isNotEmpty()
         }
         var fail = ""
         if (accSeg >= 0) fail = "Accident with a " + accType
