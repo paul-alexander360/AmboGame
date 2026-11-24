@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +49,8 @@ private val PassGreen = Color(0xFF2E9E2A)
 // Run grade card: a tan card tilted 30 degrees counter-clockwise with
 // hand-written grades. A PASS or FAIL stamp lands on it after 5 seconds.
 @Composable
-fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit) {
+// A failed run also offers a Hearts retry next to Next run. With too few Hearts the button opens the Hearts shop.
+fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () -> Unit) {
     var stamp by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(5000)
@@ -113,14 +115,29 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit) {
             ) {
                 RunProgress(rs, onKit)
                 Spacer(Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
-                        .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
-                        .clickable { onNext() }
-                        .padding(horizontal = 26.dp, vertical = 12.dp)
-                ) {
-                    Text("Next run", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (rs.canRetry()) {
+                        val enough = rs.player.hearts >= RETRY_COST
+                        Row(
+                            modifier = Modifier
+                                .background(HeartRed, RoundedCornerShape(16.dp))
+                                .clickable { if (enough) rs.retry() else onShop() }
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(if (enough) "↻ Retry " else "Get Hearts ", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            if (enough) HeartAmount(RETRY_COST, Color.White, 18, 17, Color.White)
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
+                            .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
+                            .clickable { onNext() }
+                            .padding(horizontal = 26.dp, vertical = 12.dp)
+                    ) {
+                        Text("Next run", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -195,6 +212,32 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
         Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(2.dp))
         Text(body, color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (rs.heartsEarned > 0) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Heart(15)
+                Spacer(Modifier.width(5.dp))
+                Text("+" + rs.heartsEarned + " Hearts", color = HeartSoft, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (rs.canRetry()) {
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(GlassLine)
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Retry this run with Hearts?", color = Color.White, fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)
+                )
+                Text("You have ", color = HeartSoft, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                HeartAmount(p.hearts, HeartSoft, 13, 13)
+            }
+        }
         if (rs.kitNeeded()) {
             val cost = rs.nextKitCost()
             val have = p.credits
