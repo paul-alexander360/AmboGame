@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -190,13 +191,17 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                 scale(s0 * zm, Offset.Zero) { drawStatic(city, s0 * zm) }
             }
         }
-        Canvas(Modifier.fillMaxSize()) {
-            val s0 = size.width / city.w
-            val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
-            translate(o.x, o.y) {
-                scale(s0 * zm, Offset.Zero) { drawDynamic(rs, p) }
+        // The route is built once each time it changes, then only drawn each frame for the pulse
+        Box(Modifier.fillMaxSize().drawWithCache {
+            val rd = buildRoute(rs)
+            onDrawBehind {
+                val s0 = size.width / city.w
+                val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
+                translate(o.x, o.y) {
+                    scale(s0 * zm, Offset.Zero) { drawDynamic(rs, p, rd) }
+                }
             }
-        }
+        })
     }
 }
 
@@ -570,100 +575,115 @@ private fun DrawScope.routeLine(path: Path, main: Color, shade: Color, hi: Color
     translate(0f, -1.3f) { drawPath(path, hi, style = rst(2f)) }
 }
 
-private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
+// The route lines for the map, built only when the route changes
+private class RouteDraw(
+    val route: Path?,
+    val busy: List<Pair<Offset, Offset>>,
+    val missed: Path?,
+    val red: Path?,
+    val crash: Offset?
+)
+
+private fun buildRoute(rs: RouteState): RouteDraw {
+    val c = rs.city
+    if (!rs.started) return RouteDraw(null, emptyList(), null, null, null)
+    val route = Path()
+    val sp = rs.startPt()
+    route.moveTo(sp.x, sp.y)
+    var crash: Offset? = null
+    val acc = rs.accSeg
+    val lim = if (acc >= 0) acc else rs.path.size
+    for (q in 0 until lim) {
+        val n = rs.path[q]
+        route.lineTo(c.nodeX(n % c.m), c.nodeY(n / c.m))
+    }
+    if (acc >= 0) {
+        val a = rs.path[acc - 1]
+        val b = rs.path[acc]
+        val mx = (c.nodeX(a % c.m) + c.nodeX(b % c.m)) / 2f
+        val my = (c.nodeY(a / c.m) + c.nodeY(b / c.m)) / 2f
+        route.lineTo(mx, my)
+        crash = Offset(mx, my)
+    } else if (rs.done) {
+        val ep = rs.endPt()
+        route.lineTo(ep.x, ep.y)
+    }
+    // Road pieces beside busy blocks get an orange glow
+    val busy = ArrayList<Pair<Offset, Offset>>()
+    for (q in 1 until lim) {
+        val a = rs.path[q - 1]
+        val b = rs.path[q]
+        if (c.segMult(a, b) >= 2.0) {
+            busy.add(Offset(c.nodeX(a % c.m), c.nodeY(a / c.m)) to Offset(c.nodeX(b % c.m), c.nodeY(b / c.m)))
+        }
+    }
+    // Route check after the drive to the call: red where the route left the fastest one,
+    // and the missed part of the fastest route as the same line, 80% lighter.
+    val fast = rs.fastPath.toList()
+    val check = rs.stage == 0 && rs.done && fast.isNotEmpty() && rs.path.isNotEmpty()
+    if (!check) return RouteDraw(route, busy, null, null, crash)
+    val mm = c.m * c.m
+    val ek = { a: Int, b: Int -> minOf(a, b) * mm + maxOf(a, b) }
+    val pt = { u: Int -> Offset(c.nodeX(u % c.m), c.nodeY(u / c.m)) }
+    val fastEdges = HashSet<Int>()
+    for (q in 1 until fast.size) fastEdges.add(ek(fast[q - 1], fast[q]))
+    val userEdges = HashSet<Int>()
+    for (q in 1 until rs.path.size) userEdges.add(ek(rs.path[q - 1], rs.path[q]))
+    val missed = Path()
+    val rp = Path()
+    val ep = rs.endPt()
+    if (fast[0] != rs.path[0]) {
+        missed.moveTo(sp.x, sp.y)
+        missed.lineTo(pt(fast[0]).x, pt(fast[0]).y)
+        rp.moveTo(sp.x, sp.y)
+        rp.lineTo(pt(rs.path[0]).x, pt(rs.path[0]).y)
+    }
+    for (q in 1 until fast.size) {
+        if (!userEdges.contains(ek(fast[q - 1], fast[q]))) {
+            missed.moveTo(pt(fast[q - 1]).x, pt(fast[q - 1]).y)
+            missed.lineTo(pt(fast[q]).x, pt(fast[q]).y)
+        }
+    }
+    if (fast.last() != rs.path.last()) {
+        missed.moveTo(pt(fast.last()).x, pt(fast.last()).y)
+        missed.lineTo(ep.x, ep.y)
+        if (acc < 0) {
+            rp.moveTo(pt(rs.path.last()).x, pt(rs.path.last()).y)
+            rp.lineTo(ep.x, ep.y)
+        }
+    }
+    for (q in 1 until lim) {
+        if (!fastEdges.contains(ek(rs.path[q - 1], rs.path[q]))) {
+            rp.moveTo(pt(rs.path[q - 1]).x, pt(rs.path[q - 1]).y)
+            rp.lineTo(pt(rs.path[q]).x, pt(rs.path[q]).y)
+        }
+    }
+    val cr0 = crash
+    if (acc >= 1 && cr0 != null && !fastEdges.contains(ek(rs.path[acc - 1], rs.path[acc]))) {
+        rp.moveTo(pt(rs.path[acc - 1]).x, pt(rs.path[acc - 1]).y)
+        rp.lineTo(cr0.x, cr0.y)
+    }
+    return RouteDraw(route, busy, missed, rp, crash)
+}
+
+private fun DrawScope.drawDynamic(rs: RouteState, p: Float, rd: RouteDraw) {
     val c = rs.city
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
     if (rs.stage == 0) glow(c.slotX(c.call), c.slotY(c.call), p, k)
-    if (rs.started) {
-        val route = Path()
-        val sp = rs.startPt()
-        route.moveTo(sp.x, sp.y)
-        var crash: Offset? = null
-        val acc = rs.accSeg
-        val lim = if (acc >= 0) acc else rs.path.size
-        for (q in 0 until lim) {
-            val n = rs.path[q]
-            route.lineTo(c.nodeX(n % c.m), c.nodeY(n / c.m))
-        }
-        if (acc >= 0) {
-            val a = rs.path[acc - 1]
-            val b = rs.path[acc]
-            val mx = (c.nodeX(a % c.m) + c.nodeX(b % c.m)) / 2f
-            val my = (c.nodeY(a / c.m) + c.nodeY(b / c.m)) / 2f
-            route.lineTo(mx, my)
-            crash = Offset(mx, my)
-        } else if (rs.done) {
-            val ep = rs.endPt()
-            route.lineTo(ep.x, ep.y)
-        }
-        // Orange glow under road pieces beside busy blocks
-        for (q in 1 until lim) {
-            val a = rs.path[q - 1]
-            val b = rs.path[q]
-            if (c.segMult(a, b) >= 2.0) {
-                drawLine(
-                    Color(0xFFFF9F1C), Offset(c.nodeX(a % c.m), c.nodeY(a / c.m)), Offset(c.nodeX(b % c.m), c.nodeY(b / c.m)),
-                    14f, StrokeCap.Round, alpha = 0.6f
-                )
-            }
-        }
+    val route = rd.route
+    if (route != null) {
+        for (seg in rd.busy) drawLine(Color(0xFFFF9F1C), seg.first, seg.second, 14f, StrokeCap.Round, alpha = 0.6f)
         val blue = Color(0xFF2E7BFF)
         val blueShade = Color(0xFF0E2A78)
         val blueHi = Color(0xFFBFE0FF)
-        // Route check after the drive to the call: red where the route left the fastest one,
-        // and the missed part of the fastest route as the same line, 80% lighter.
-        val fast = rs.fastPath.toList()
-        val check = rs.stage == 0 && rs.done && fast.isNotEmpty() && rs.path.isNotEmpty()
-        var red: Path? = null
-        if (check) {
-            val mm = c.m * c.m
-            val ek = { a: Int, b: Int -> minOf(a, b) * mm + maxOf(a, b) }
-            val pt = { u: Int -> Offset(c.nodeX(u % c.m), c.nodeY(u / c.m)) }
-            val fastEdges = HashSet<Int>()
-            for (q in 1 until fast.size) fastEdges.add(ek(fast[q - 1], fast[q]))
-            val userEdges = HashSet<Int>()
-            for (q in 1 until rs.path.size) userEdges.add(ek(rs.path[q - 1], rs.path[q]))
-            val missed = Path()
-            val rp = Path()
-            val ep = rs.endPt()
-            if (fast[0] != rs.path[0]) {
-                missed.moveTo(sp.x, sp.y)
-                missed.lineTo(pt(fast[0]).x, pt(fast[0]).y)
-                rp.moveTo(sp.x, sp.y)
-                rp.lineTo(pt(rs.path[0]).x, pt(rs.path[0]).y)
-            }
-            for (q in 1 until fast.size) {
-                if (!userEdges.contains(ek(fast[q - 1], fast[q]))) {
-                    missed.moveTo(pt(fast[q - 1]).x, pt(fast[q - 1]).y)
-                    missed.lineTo(pt(fast[q]).x, pt(fast[q]).y)
-                }
-            }
-            if (fast.last() != rs.path.last()) {
-                missed.moveTo(pt(fast.last()).x, pt(fast.last()).y)
-                missed.lineTo(ep.x, ep.y)
-                if (acc < 0) {
-                    rp.moveTo(pt(rs.path.last()).x, pt(rs.path.last()).y)
-                    rp.lineTo(ep.x, ep.y)
-                }
-            }
-            for (q in 1 until lim) {
-                if (!fastEdges.contains(ek(rs.path[q - 1], rs.path[q]))) {
-                    rp.moveTo(pt(rs.path[q - 1]).x, pt(rs.path[q - 1]).y)
-                    rp.lineTo(pt(rs.path[q]).x, pt(rs.path[q]).y)
-                }
-            }
-            val cr0 = crash
-            if (acc >= 1 && cr0 != null && !fastEdges.contains(ek(rs.path[acc - 1], rs.path[acc]))) {
-                rp.moveTo(pt(rs.path[acc - 1]).x, pt(rs.path[acc - 1]).y)
-                rp.lineTo(cr0.x, cr0.y)
-            }
+        val missed = rd.missed
+        if (missed != null) {
             routeLine(missed, lerp(blue, Color.White, 0.8f), lerp(blueShade, Color.White, 0.8f), lerp(blueHi, Color.White, 0.8f))
-            red = rp
         }
         routeLine(route, blue, blueShade, blueHi)
-        val rr = red
+        val rr = rd.red
         if (rr != null) routeLine(rr, Color(0xFFE53935), Color(0xFF7A1010), Color(0xFFFFC4C4))
-        val cr = crash
+        val cr = rd.crash
         if (cr != null) {
             drawCircle(Color(0x66E53935), 12f, cr)
             drawCircle(Color.White, 8f, cr)
