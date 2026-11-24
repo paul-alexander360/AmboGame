@@ -44,6 +44,9 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     var drv: Double = 0.1
     var heavy: Double = 0.0
     var cross: Double = 1.0
+
+    // Standard medic for this level. Drive grades compare you to this driver's best route.
+    val targetDrv: Double = Levels.driver[level - 1]
     val distraction: Double = Levels.distraction[level - 1]
     val zone = IntArray(n * n)
     val dens = IntArray(n * n)
@@ -252,7 +255,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return trafficTbl[zone[br * n + bc]][dens[br * n + bc]]
     }
 
-    private fun segTime(a: Int, b: Int): Double {
+    private fun segTime(a: Int, b: Int, std: Boolean = false): Double {
         val i1 = a % m
         val j1 = a / m
         val i2 = b % m
@@ -270,8 +273,8 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         }
         val v = list.filterNotNull()
         var traffic = if (v.isEmpty()) 0.0 else v.average()
-        if (traffic > 0.5) traffic = maxOf(0.0, traffic - heavy)
-        return 30.0 * maxOf(0.2, ratingTbl[q] + traffic + drv)
+        if (traffic > 0.5 && !std) traffic = maxOf(0.0, traffic - heavy)
+        return 30.0 * maxOf(0.2, ratingTbl[q] + traffic + (if (std) targetDrv else drv))
     }
 
     private fun blockRisk(tbl: Array<DoubleArray>, bc: Int, br: Int): Double? {
@@ -325,7 +328,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return Math.round(maxOf(0.01, c) * 1000.0) / 1000.0
     }
 
-    private fun nodeTime(u: Int): Double = (1.0 + (if (light[u]) 4.0 else 2.0)) * cross
+    private fun nodeTime(u: Int, std: Boolean = false): Double = (1.0 + (if (light[u]) 4.0 else 2.0)) * (if (std) 1.0 else cross)
 
     fun pathTime(path: List<Int>): Double {
         var total = 0.0
@@ -336,7 +339,8 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return total
     }
 
-    fun fastest(starts: IntArray, goals: IntArray): Double {
+    // Best time from starts to goals. std = true times it for the standard medic of this level.
+    fun fastest(starts: IntArray, goals: IntArray, std: Boolean = false): Double {
         val total = m * m
         val dist = DoubleArray(total) { Double.MAX_VALUE }
         val seen = BooleanArray(total)
@@ -352,7 +356,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             seen[u] = true
             for (v in nbr(u)) {
                 if (canGo(u, v)) {
-                    val c = dist[u] + segTime(u, v) + (if (isGoal[v]) 0.0 else nodeTime(v))
+                    val c = dist[u] + segTime(u, v, std) + (if (isGoal[v]) 0.0 else nodeTime(v, std))
                     if (c < dist[v]) dist[v] = c
                 }
             }
