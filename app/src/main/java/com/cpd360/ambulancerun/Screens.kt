@@ -387,7 +387,7 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
         SectionTitle("Paint")
         WhiteCard {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                for (i in AmbColors.indices) {
+                for (i in 0 until FIRST_HEART_PAINT) {
                     val locked = player.ambUp[COMPARTMENT] < i
                     Swatch(
                         AmbColors[i], player.ambColor == i, locked,
@@ -395,6 +395,28 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
                     ) { player.ambColor = i; player.save() }
                 }
             }
+        }
+        SectionTitle("Hearts paints")
+        WhiteCard {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                for (i in FIRST_HEART_PAINT until AmbColors.size) {
+                    val owned = player.ownsPaint(i)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Swatch(AmbColors[i], player.ambColor == i, false, AmbColorNames[i]) {
+                            if (owned) {
+                                player.ambColor = i
+                                player.save()
+                            } else if (player.spendHearts(PAINT_COST)) {
+                                player.paintsOwned.add(i)
+                                player.ambColor = i
+                                player.save()
+                            }
+                        }
+                        if (!owned) HeartAmount(PAINT_COST, if (player.hearts >= PAINT_COST) HeartRed else MuteText, 11, 11)
+                    }
+                }
+            }
+            Text("Tap a color to buy it with Hearts. You have " + "%,d".format(player.hearts) + ".", fontSize = 11.sp, color = MuteText)
         }
         SectionTitle("Speed")
         SpeedCard(player)
