@@ -437,3 +437,88 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
         Text("Version $version", color = MuteText, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
+
+// One kit on the Medical kit page. state: 0 owned, 1 next (buyable when canBuy), 2 later
+@Composable
+private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: () -> Unit) {
+    val i = lv - 1
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (state == 2) Color(0x99FFFFFF) else Color.White, RoundedCornerShape(16.dp))
+            .border(if (state == 1) 2.dp else 1.dp, if (state == 1) RouteRed else CardLine, RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(SoftFill, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(kitGlyphs[i], fontSize = 20.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "Level $lv · " + kitNames[i], fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                color = if (state == 2) MuteText else InkText
+            )
+            Text(kitDescs[i], fontSize = 11.sp, color = MuteText)
+            if (note != "") Text(note, fontSize = 11.sp, color = RouteRed, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(10.dp))
+        when (state) {
+            0 -> Box(
+                modifier = Modifier
+                    .background(Color(0xFF6FAE3E), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text("OWNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+            else -> Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (canBuy) GlassSolid else SoftFill)
+                    .clickable(enabled = canBuy) { onBuy() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (state == 1) {
+                    Coin(14)
+                    Spacer(Modifier.width(5.dp))
+                }
+                Text(
+                    "%,d".format(kitCost(lv)), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    color = if (canBuy) Color.White else MuteText
+                )
+            }
+        }
+    }
+}
+
+// Medical kit page. level is the level you are on; ready is true once City 5 of that level is cleared.
+@Composable
+fun KitScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit, onBack: () -> Unit) {
+    Page("Medical kit", player, onBack) {
+        SectionTitle("Your kit")
+        for (lv in 1..level) KitCard(lv, 0, false, "") { }
+        if (level < MAX_LEVEL) {
+            val next = level + 1
+            val cost = kitCost(next)
+            val note = if (!ready) "Clear City 5 of Level $level to unlock."
+                else if (player.credits < cost) "%,d".format(cost - player.credits) + " more credits needed."
+                else "Opens Level $next cities."
+            SectionTitle("Next level")
+            KitCard(next, 1, ready && player.credits >= cost, note) { onBuy() }
+            if (next < MAX_LEVEL) {
+                SectionTitle("Later")
+                for (lv in next + 1..MAX_LEVEL) KitCard(lv, 2, false, "") { }
+            }
+        } else {
+            WhiteCard {
+                Text("You have every kit.", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
+            }
+        }
+    }
+}
