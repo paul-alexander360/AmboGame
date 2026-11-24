@@ -58,6 +58,15 @@ class PlayerData(private val ctx: Context) {
     var org = "County EMS"
     var orgColor = 0xFFE53935.toInt()
     var credits by mutableIntStateOf(0)
+    // Premium currency
+    var hearts by mutableIntStateOf(0)
+    // Free Hearts from ads: the day (epoch day) and how many were watched that day
+    var adDay = 0L
+    var adsToday by mutableIntStateOf(0)
+    // Siren boost bought with Hearts: true until the end of the next run
+    var boost by mutableStateOf(false)
+    // Hearts-only paints bought (paint indexes)
+    val paintsOwned = mutableStateListOf<Int>()
     var totalXp by mutableIntStateOf(0)
     var heavy = 0
 
@@ -124,6 +133,20 @@ class PlayerData(private val ctx: Context) {
                 0.04 * (ambUp[BRAKES] + ambUp[LIGHTS] + ambUp[SIREN])
         )
 
+    fun addHearts(n: Int) {
+        hearts += n
+        save()
+    }
+
+    fun spendHearts(n: Int): Boolean {
+        if (hearts < n) return false
+        hearts -= n
+        save()
+        return true
+    }
+
+    fun ownsPaint(i: Int): Boolean = i < FIRST_HEART_PAINT || paintsOwned.contains(i)
+
     fun buyChar(k: Int): Boolean {
         val lv = charUp[k]
         if (lv >= MAX_UP || credits < upgradeCost(lv)) return false
@@ -150,6 +173,11 @@ class PlayerData(private val ctx: Context) {
             o.put("org", org)
             o.put("orgColor", orgColor)
             o.put("credits", credits)
+            o.put("hearts", hearts)
+            o.put("adDay", adDay)
+            o.put("adsToday", adsToday)
+            o.put("boost", boost)
+            o.put("paintsOwned", JSONArray(paintsOwned.toList()))
             o.put("xp", totalXp)
             o.put("heavy", heavy)
             o.put("cityLevel", cityLevel)
@@ -194,6 +222,15 @@ class PlayerData(private val ctx: Context) {
             org = o.optString("org", org)
             orgColor = o.optInt("orgColor", orgColor)
             credits = o.optInt("credits", 0)
+            hearts = o.optInt("hearts", 0).coerceAtLeast(0)
+            adDay = o.optLong("adDay", 0L)
+            adsToday = o.optInt("adsToday", 0)
+            boost = o.optBoolean("boost", false)
+            val po = o.optJSONArray("paintsOwned")
+            if (po != null) for (i in 0 until po.length()) {
+                val v = po.optInt(i, -1)
+                if (v >= FIRST_HEART_PAINT && v < AmbColors.size && !paintsOwned.contains(v)) paintsOwned.add(v)
+            }
             totalXp = o.optInt("xp", 0)
             heavy = o.optInt("heavy", 0)
             cityLevel = o.optInt("cityLevel", 1).coerceIn(1, MAX_LEVEL)
@@ -204,7 +241,8 @@ class PlayerData(private val ctx: Context) {
             hairStyle = o.optInt("hairStyle", 0).coerceIn(0, 2)
             hairColor = o.optInt("hairColor", 1).coerceIn(0, 3)
             uniform = o.optInt("uniform", 0).coerceIn(0, 3)
-            ambColor = o.optInt("ambColor", 0).coerceIn(0, 4)
+            ambColor = o.optInt("ambColor", 0).coerceIn(0, AmbColors.size - 1)
+            if (!ownsPaint(ambColor)) ambColor = 0
             sirenSound = o.optBoolean("sirenSound", true)
             driveScenes = o.optBoolean("driveScenes", true)
             readList(o, "charUp", charUp)
