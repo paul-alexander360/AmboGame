@@ -561,6 +561,15 @@ private fun DrawScope.ambFront(x: Float, y: Float) = translate(x, y) {
     }
 }
 
+// One route line: soft glow, drop shadow, main stroke and a thin highlight
+private fun DrawScope.routeLine(path: Path, main: Color, shade: Color, hi: Color) {
+    val rst = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
+    drawPath(path, main, alpha = 0.10f, style = rst(9f))
+    translate(0f, 2.2f) { drawPath(path, shade, alpha = 0.55f, style = rst(6f)) }
+    drawPath(path, main, style = rst(6f))
+    translate(0f, -1.3f) { drawPath(path, hi, style = rst(2f)) }
+}
+
 private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
     val c = rs.city
     val k = if (p < 0.5f) p * 2f else (1f - p) * 2f
@@ -587,7 +596,6 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
             val ep = rs.endPt()
             route.lineTo(ep.x, ep.y)
         }
-        val rst = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
         // Orange glow under road pieces beside busy blocks
         for (q in 1 until lim) {
             val a = rs.path[q - 1]
@@ -599,10 +607,62 @@ private fun DrawScope.drawDynamic(rs: RouteState, p: Float) {
                 )
             }
         }
-        drawPath(route, Color(0xFF2E7BFF), alpha = 0.10f, style = rst(9f))
-        translate(0f, 2.2f) { drawPath(route, Color(0xFF0E2A78), alpha = 0.55f, style = rst(6f)) }
-        drawPath(route, Color(0xFF2E7BFF), style = rst(6f))
-        translate(0f, -1.3f) { drawPath(route, Color(0xFFBFE0FF), style = rst(2f)) }
+        val blue = Color(0xFF2E7BFF)
+        val blueShade = Color(0xFF0E2A78)
+        val blueHi = Color(0xFFBFE0FF)
+        // Route check after the drive to the call: red where the route left the fastest one,
+        // and the missed part of the fastest route as the same line, 80% lighter.
+        val fast = rs.fastPath.toList()
+        val check = rs.stage == 0 && rs.done && fast.isNotEmpty() && rs.path.isNotEmpty()
+        var red: Path? = null
+        if (check) {
+            val mm = c.m * c.m
+            val ek = { a: Int, b: Int -> minOf(a, b) * mm + maxOf(a, b) }
+            val pt = { u: Int -> Offset(c.nodeX(u % c.m), c.nodeY(u / c.m)) }
+            val fastEdges = HashSet<Int>()
+            for (q in 1 until fast.size) fastEdges.add(ek(fast[q - 1], fast[q]))
+            val userEdges = HashSet<Int>()
+            for (q in 1 until rs.path.size) userEdges.add(ek(rs.path[q - 1], rs.path[q]))
+            val missed = Path()
+            val rp = Path()
+            val ep = rs.endPt()
+            if (fast[0] != rs.path[0]) {
+                missed.moveTo(sp.x, sp.y)
+                missed.lineTo(pt(fast[0]).x, pt(fast[0]).y)
+                rp.moveTo(sp.x, sp.y)
+                rp.lineTo(pt(rs.path[0]).x, pt(rs.path[0]).y)
+            }
+            for (q in 1 until fast.size) {
+                if (!userEdges.contains(ek(fast[q - 1], fast[q]))) {
+                    missed.moveTo(pt(fast[q - 1]).x, pt(fast[q - 1]).y)
+                    missed.lineTo(pt(fast[q]).x, pt(fast[q]).y)
+                }
+            }
+            if (fast.last() != rs.path.last()) {
+                missed.moveTo(pt(fast.last()).x, pt(fast.last()).y)
+                missed.lineTo(ep.x, ep.y)
+                if (acc < 0) {
+                    rp.moveTo(pt(rs.path.last()).x, pt(rs.path.last()).y)
+                    rp.lineTo(ep.x, ep.y)
+                }
+            }
+            for (q in 1 until lim) {
+                if (!fastEdges.contains(ek(rs.path[q - 1], rs.path[q]))) {
+                    rp.moveTo(pt(rs.path[q - 1]).x, pt(rs.path[q - 1]).y)
+                    rp.lineTo(pt(rs.path[q]).x, pt(rs.path[q]).y)
+                }
+            }
+            val cr0 = crash
+            if (acc >= 1 && cr0 != null && !fastEdges.contains(ek(rs.path[acc - 1], rs.path[acc]))) {
+                rp.moveTo(pt(rs.path[acc - 1]).x, pt(rs.path[acc - 1]).y)
+                rp.lineTo(cr0.x, cr0.y)
+            }
+            routeLine(missed, lerp(blue, Color.White, 0.8f), lerp(blueShade, Color.White, 0.8f), lerp(blueHi, Color.White, 0.8f))
+            red = rp
+        }
+        routeLine(route, blue, blueShade, blueHi)
+        val rr = red
+        if (rr != null) routeLine(rr, Color(0xFFE53935), Color(0xFF7A1010), Color(0xFFFFC4C4))
         val cr = crash
         if (cr != null) {
             drawCircle(Color(0x66E53935), 12f, cr)
