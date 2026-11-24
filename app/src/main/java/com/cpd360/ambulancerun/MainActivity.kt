@@ -211,7 +211,8 @@ fun HomeScreen(version: String, player: PlayerData) {
             TopBar(rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared(), par) { menu = true }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Box(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (ACCIDENTS_ON && rs.path.size > 1 && rs.accSeg < 0) RiskPill(rs.routeRisk(), false)
                     if (hint && !rs.done) {
                         HintPill(
                             if (rs.stage == 1) "Drag from the ambulance to the right hospital. Double tap a hospital to see what it treats."
@@ -257,12 +258,15 @@ fun HomeScreen(version: String, player: PlayerData) {
                         color = GlassMute, fontSize = 14.sp
                     )
                     Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .background(cols[rt], RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 5.dp)
-                    ) {
-                        Text(names[rt] + " route", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .background(cols[rt], RoundedCornerShape(12.dp))
+                                .padding(horizontal = 14.dp, vertical = 5.dp)
+                        ) {
+                            Text(names[rt] + " route", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (ACCIDENTS_ON) RiskPill(rs.routeRisk(), true)
                     }
                 }
                 if (rs.runOver) {
@@ -385,6 +389,32 @@ private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone:
             Spacer(Modifier.width(5.dp))
             Text(fmt(par), color = CallYellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+// Crash risk of the route. Green under 2.5%, yellow under 5%, red above.
+@Composable
+private fun RiskPill(risk: Double, withWord: Boolean) {
+    val pct = risk * 100.0
+    val bg = if (pct < 2.5) Color(0xFFCFEFB0) else if (pct < 5.0) Color(0xFFFFE08A) else Color(0xFFFFB3A8)
+    val dot = if (pct < 2.5) Color(0xFF4E9A22) else if (pct < 5.0) Color(0xFFD99A00) else RouteRed
+    val word = if (pct < 2.5) " · Quiet streets" else if (pct < 5.0) "" else " · Busy streets"
+    Row(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(9.dp)
+                .background(dot, CircleShape)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "Crash risk " + "%.1f".format(pct) + "%" + (if (withWord) word else ""),
+            color = InkText, fontSize = 13.sp, fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -533,8 +563,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
         }
         Spacer(Modifier.weight(1f))
         Text(
-            "Version $version  ·  Drive " + "%.3f".format(player.drive) + "  ·  Avoid " + "%.2f".format(player.avoidance) +
-                "  ·  Dodge " + Math.round(player.dodge * 100).toInt() + "%",
+            "Version $version  ·  Drive " + "%.3f".format(player.drive) + "  ·  Crash risk ×" + "%.2f".format(player.riskMult),
             color = Color(0xFF8E92C4), fontSize = 11.sp
         )
     }
