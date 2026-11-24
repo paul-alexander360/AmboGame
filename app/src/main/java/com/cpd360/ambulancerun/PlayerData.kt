@@ -28,6 +28,29 @@ const val MAX_UP = 5
 
 fun upgradeCost(current: Int): Int = 100 shl current
 
+// Medical kits. Each level has its own kit with the tests and treatments that level unlocks.
+// You buy the next level's kit once City 5 of your level is cleared, and it moves you to City 1 of that level.
+const val MAX_LEVEL = 8
+const val RUNS_PER_CITY = 5
+
+fun kitCost(level: Int): Int = 500 * level
+
+val kitNames = listOf(
+    "Basics", "Vitals", "Pulse ox + Oxygen", "Glucose test + Glucose",
+    "Splint / Stop bleeding", "CPR", "Stroke test", "ECG + Shock"
+)
+val kitDescs = listOf(
+    "Talk to the patient, pick the hospital.",
+    "Blood pressure and pulse.",
+    "Check oxygen levels and give oxygen.",
+    "Check blood sugar and give glucose.",
+    "Stop bleeding and splint broken bones.",
+    "Start CPR when the heart stops.",
+    "Check for signs of a stroke.",
+    "Read the heart rhythm and shock it."
+)
+val kitGlyphs = listOf("🩺", "💓", "🫁", "🩸", "🩹", "❤️", "🧠", "⚡")
+
 class PlayerData(private val ctx: Context) {
     var name by mutableStateOf("Player")
     var unit = "1"
@@ -36,6 +59,11 @@ class PlayerData(private val ctx: Context) {
     var credits by mutableIntStateOf(0)
     var totalXp by mutableIntStateOf(0)
     var heavy = 0
+
+    // Where you are in the game: level 1 to 8, city 0 to 4, and runs with no F in this city
+    var cityLevel = 1
+    var cityIdx = 0
+    var goodRuns by mutableIntStateOf(0)
 
     // Character look
     var female by mutableStateOf(false)
@@ -96,6 +124,9 @@ class PlayerData(private val ctx: Context) {
             o.put("credits", credits)
             o.put("xp", totalXp)
             o.put("heavy", heavy)
+            o.put("cityLevel", cityLevel)
+            o.put("cityIdx", cityIdx)
+            o.put("goodRuns", goodRuns)
             o.put("female", female)
             o.put("skin", skin)
             o.put("hairStyle", hairStyle)
@@ -136,6 +167,9 @@ class PlayerData(private val ctx: Context) {
             credits = o.optInt("credits", 0)
             totalXp = o.optInt("xp", 0)
             heavy = o.optInt("heavy", 0)
+            cityLevel = o.optInt("cityLevel", 1).coerceIn(1, MAX_LEVEL)
+            cityIdx = o.optInt("cityIdx", 0).coerceIn(0, 4)
+            goodRuns = o.optInt("goodRuns", 0).coerceIn(0, RUNS_PER_CITY)
             female = o.optBoolean("female", false)
             skin = o.optInt("skin", 0).coerceIn(0, 2)
             hairStyle = o.optInt("hairStyle", 0).coerceIn(0, 2)
