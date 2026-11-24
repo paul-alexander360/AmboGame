@@ -96,6 +96,14 @@ class PlayerData(private val ctx: Context) {
     val dodge: Double get() = minOf(0.9, 0.05 + 0.01 * (level - 1))
     val heavyBonus: Double get() = 0.1 * heavy
 
+    // Crash risk multiplier from skills and upgrades. Never below 30% of the base.
+    val riskMult: Double
+        get() = maxOf(
+            0.3,
+            1.0 - 0.08 * (charUp[SKILL_PED] + charUp[SKILL_CRASH]) -
+                0.04 * (ambUp[BRAKES] + ambUp[LIGHTS] + ambUp[SIREN])
+        )
+
     fun buyChar(k: Int): Boolean {
         val lv = charUp[k]
         if (lv >= MAX_UP || credits < upgradeCost(lv)) return false
