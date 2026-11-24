@@ -166,6 +166,12 @@ fun HomeScreen(version: String, player: PlayerData) {
             }
             return
         }
+        6 -> {
+            KitScreen(player, rs.level, rs.kitNeeded(), {
+                if (rs.buyKit()) screen = 0
+            }) { screen = 0 }
+            return
+        }
     }
     LaunchedEffect(rs.done, rs.stage) {
         if (rs.done && !rs.driveShown && player.driveScenes && rs.path.size > 0) screen = 5
@@ -202,14 +208,15 @@ fun HomeScreen(version: String, player: PlayerData) {
                 .safeDrawingPadding()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            TopBar(rs.level, rs.idx, rs.run, par) { menu = true }
+            TopBar(rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared(), par) { menu = true }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.weight(1f)) {
                     if (hint && !rs.done) {
                         HintPill(
-                            if (rs.stage == 0) "Drag from the station to the glowing call. Pinch to zoom, two fingers to move."
-                            else "Drag from the ambulance to the right hospital. Double tap a hospital to see what it treats."
+                            if (rs.stage == 1) "Drag from the ambulance to the right hospital. Double tap a hospital to see what it treats."
+                            else if (rs.level == 1 && rs.idx == 0 && player.goodRuns == 0) "Drag from the station to the glowing call. Pinch to zoom, two fingers to move."
+                            else progressHint(rs, player.goodRuns)
                         ) { hint = false }
                     }
                 }
@@ -284,17 +291,28 @@ fun HomeScreen(version: String, player: PlayerData) {
                     2 -> screen = 4
                     3 -> rs.reset()
                     4 -> rs.nextCity()
+                    5 -> screen = 6
                 }
             }
         }
         if (rs.runOver && rs.driveShown && rs.gTo >= 0) {
-            GradeCard(rs) { rs.nextRun() }
+            GradeCard(rs, { rs.nextRun() }) { screen = 6 }
         }
     }
 }
 
+// Hint at the start of a run: how far you are in this city.
+private fun progressHint(rs: RouteState, good: Int): String {
+    if (rs.kitNeeded()) return "Keep running calls here to earn credits for the Level " + (rs.level + 1) + " kit."
+    if (rs.cityCleared()) return "Every city cleared. Keep running calls for credits and upgrades."
+    val left = RUNS_PER_CITY - good
+    val runs = if (left == 1) "1 more run" else "$left more runs"
+    return if (rs.idx < 4) "$runs with no F to reach City " + (rs.idx + 2) + "."
+        else "$runs with no F to clear City 5."
+}
+
 @Composable
-private fun TopBar(level: Int, idx: Int, run: Int, par: Double, onMenu: () -> Unit) {
+private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone: Boolean, par: Double, onMenu: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -320,20 +338,33 @@ private fun TopBar(level: Int, idx: Int, run: Int, par: Double, onMenu: () -> Un
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text("City " + level + "." + (idx + 1), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("Level $level", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
-                Text("Run " + run + " of 5", color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("City " + (idx + 1) + " of 5", color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (i in 1..5) {
-                    val c = if (i < run) ParkGreen else if (i == run) CallYellow else GlassLine
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(4.dp)
-                            .background(c, RoundedCornerShape(2.dp))
+            if (kitNeeded || allDone) {
+                Box(
+                    Modifier
+                        .background(CallYellow, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 7.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        if (kitNeeded) "KIT NEEDED" else "ALL CLEARED", color = InkText,
+                        fontSize = 10.sp, fontWeight = FontWeight.Bold
                     )
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (i in 1..RUNS_PER_CITY) {
+                        val c = if (i <= good) ParkGreen else if (i == good + 1) CallYellow else GlassLine
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .background(c, RoundedCornerShape(2.dp))
+                        )
+                    }
                 }
             }
         }
@@ -469,6 +500,13 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                 scale(sc, Offset.Zero) { paramedic(player.female, player.skin, player.hairStyle, player.hairColor, player.uniform) }
             }
         }) { onPick(1) }
+        DrawerItem("Medical kit", "Level " + rs.level + " · " + kitNames[rs.level - 1], {
+            val s = size.width
+            drawRoundRect(Color.White, Offset(s * 0.1f, s * 0.2f), Size(s * 0.8f, s * 0.66f), CornerRadius(s * 0.1f, s * 0.1f))
+            drawRoundRect(Color.White, Offset(s * 0.35f, s * 0.1f), Size(s * 0.3f, s * 0.16f), CornerRadius(s * 0.05f, s * 0.05f), style = Stroke(s * 0.05f))
+            drawRect(RouteRed, Offset(s * 0.43f, s * 0.33f), Size(s * 0.14f, s * 0.4f))
+            drawRect(RouteRed, Offset(s * 0.3f, s * 0.46f), Size(s * 0.4f, s * 0.14f))
+        }) { onPick(5) }
         DrawerItem("Settings", "Sound and drive scenes", {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.width * 0.28f
