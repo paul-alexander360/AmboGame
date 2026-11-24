@@ -91,6 +91,10 @@ class PlayerData(private val ctx: Context) {
     val drive: Double
         get() = 0.1 - 0.005 * (level - 1) - 0.02 * charUp[SKILL_DRIVE] -
             0.015 * (ambUp[TIRES] + ambUp[ENGINE] + ambUp[CAB])
+    // Your speed against the standard medic of a level, on a typical road.
+    // Above 0 means slower than the target, below 0 faster. 0.06 = 6% slower.
+    fun speedVsTarget(lvl: Int): Double = (1.5 + drive) / (1.5 + Levels.driver[lvl - 1]) - 1.0
+
     val crossK: Double get() = 1.0 - 0.06 * (ambUp[LIGHTS] + ambUp[SIREN])
     val avoidance: Double get() = 0.01 * (level - 1)
     val dodge: Double get() = minOf(0.9, 0.05 + 0.01 * (level - 1))
