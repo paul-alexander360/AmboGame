@@ -48,7 +48,7 @@ private val PassGreen = Color(0xFF2E9E2A)
 // Run grade card: a tan card tilted 30 degrees counter-clockwise with
 // hand-written grades. A PASS or FAIL stamp lands on it after 5 seconds.
 @Composable
-fun GradeCard(rs: RouteState, onNext: () -> Unit) {
+fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit) {
     var stamp by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(5000)
@@ -103,17 +103,25 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit) {
                     fontWeight = FontWeight.Black, letterSpacing = 4.sp
                 )
             }
-            Box(
+            Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
                     .safeDrawingPadding()
-                    .padding(bottom = 32.dp)
-                    .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
-                    .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
-                    .clickable { onNext() }
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
+                    .padding(start = 12.dp, end = 12.dp, bottom = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Next run", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                RunProgress(rs, onKit)
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
+                        .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
+                        .clickable { onNext() }
+                        .padding(horizontal = 26.dp, vertical = 12.dp)
+                ) {
+                    Text("Next run", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -153,6 +161,82 @@ private fun GradeRow(label: String, note: String, grade: Int) {
                 fontFamily = FontFamily.Cursive,
                 modifier = Modifier.rotate(-8f)
             )
+        }
+    }
+}
+
+// Panel under the grade card: did this run count, and what is next.
+@Composable
+fun RunProgress(rs: RouteState, onKit: () -> Unit) {
+    val p = rs.player
+    val good = p.goodRuns
+    val title: String
+    val body: String
+    if (rs.kitNeeded()) {
+        title = "City 5 cleared!"
+        body = "Buy the Level " + (rs.level + 1) + " kit to move on to Level " + (rs.level + 1) + "."
+    } else if (rs.cityCleared()) {
+        title = "Every city cleared!"
+        body = "Keep running calls for credits and upgrades."
+    } else if (rs.counted) {
+        title = "Run counted"
+        body = if (good >= RUNS_PER_CITY) "City " + (rs.idx + 1) + " cleared! Next run is in City " + (rs.idx + 2) + "."
+            else "$good of $RUNS_PER_CITY runs done in this city."
+    } else {
+        title = "Run didn't count"
+        body = "A run with an F doesn't fill a dot. Still $good of $RUNS_PER_CITY runs done in this city."
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Glass, RoundedCornerShape(18.dp))
+            .padding(14.dp)
+    ) {
+        Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(2.dp))
+        Text(body, color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        if (rs.kitNeeded()) {
+            val cost = rs.nextKitCost()
+            val have = p.credits
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Coin(13)
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    "%,d".format(minOf(have, cost)) + " of " + "%,d".format(cost),
+                    color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)
+                )
+                val left = cost - have
+                Text(
+                    if (left <= 0) "ready to buy" else "about " + ((left + 99) / 100) + " more runs",
+                    color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .background(GlassLine, RoundedCornerShape(4.dp))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth((have.toFloat() / cost).coerceIn(0f, 1f))
+                        .height(8.dp)
+                        .background(CallYellow, RoundedCornerShape(4.dp))
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(GlassLine, RoundedCornerShape(12.dp))
+                    .clickable { onKit() }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Medical kit", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
