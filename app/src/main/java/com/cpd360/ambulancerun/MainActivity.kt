@@ -124,11 +124,17 @@ fun HomeScreen(version: String, player: PlayerData) {
     val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
+    val guide = remember { GuideState() }
     when (screen) {
         1 -> {
-            ExamScreen(rs.patient, rs.level) {
-                rs.examDone()
-                screen = 0
+            Box(Modifier.fillMaxSize()) {
+                ExamScreen(rs.patient, rs.level) {
+                    rs.examDone()
+                    screen = 0
+                }
+                // Dr. Ray explains the exam the first time, then each new skill
+                val dt = examTip(rs.level, player)
+                if (dt != "") DrTip(dt, rs.level) { player.markSeen(dt) }
             }
             return
         }
@@ -167,19 +173,26 @@ fun HomeScreen(version: String, player: PlayerData) {
             return
         }
         6 -> {
-            KitScreen(player, rs.level, rs.kitNeeded(), {
+            DrScreen(player, rs.level, rs.kitNeeded(), {
                 if (rs.buyKit()) screen = 0
             }) { screen = 0 }
             return
         }
     }
     LaunchedEffect(rs.done, rs.stage) {
-        if (rs.done && !rs.driveShown && player.driveScenes && rs.path.size > 0) screen = 5
-        else if (rs.done) rs.driveShown = true
+        if (rs.done && !rs.driveShown) {
+            // Route check: hold the map for 2 seconds so the player can see the red and missed parts
+            if (rs.checking) {
+                delay(2000)
+                rs.checking = false
+            }
+            if (player.driveScenes && rs.path.size > 0) screen = 5 else rs.driveShown = true
+        }
     }
     // The hint shows for a few seconds at the start of each leg, then fades away.
-    var hint by remember(rs.version, rs.stage) { mutableStateOf(true) }
-    LaunchedEffect(rs.version, rs.stage) {
+    // It starts once the call card is answered.
+    var hint by remember(rs.version, rs.stage, guide.callFor) { mutableStateOf(true) }
+    LaunchedEffect(rs.version, rs.stage, guide.callFor) {
         delay(8000)
         hint = false
     }
@@ -216,8 +229,7 @@ fun HomeScreen(version: String, player: PlayerData) {
                     if (hint && !rs.done) {
                         HintPill(
                             if (rs.stage == 1) "Drag from the ambulance to the right hospital. Double tap a hospital to see what it treats."
-                            else if (rs.level == 1 && rs.idx == 0 && player.goodRuns == 0) "Drag from the station to the glowing call. Pinch to zoom, two fingers to move."
-                            else progressHint(rs, player.goodRuns)
+                            else rs.patient.address + ": " + rs.patient.title.lowercase() + ". Drag from the station to the glowing call."
                         ) { hint = false }
                     }
                 }
@@ -230,7 +242,7 @@ fun HomeScreen(version: String, player: PlayerData) {
             }
         }
         // Bottom: only shows once a route is finished.
-        if (rs.done) {
+        if (rs.done && !rs.checking) {
             val user = rs.city.pathTime(rs.path.toList())
             val rt = rating(user, fast)
             val names = listOf("Green", "Yellow", "Orange", "Red")
@@ -302,17 +314,16 @@ fun HomeScreen(version: String, player: PlayerData) {
         if (rs.runOver && rs.driveShown && rs.gTo >= 0) {
             GradeCard(rs, { rs.nextRun() }) { screen = 6 }
         }
+        // Dot: first-time tips, then the call card at the start of each run
+        if (!menu) {
+            val tip = mapTip(rs, player, guide)
+            if (tip != "") {
+                DotTip(tip, rs) { player.markSeen(tip) }
+            } else if (rs.stage == 0 && !rs.done && !rs.started && rs.path.isEmpty() && guide.callFor != rs.version) {
+                CallCard(rs, player, guide, fast) { guide.callFor = rs.version }
+            }
+        }
     }
-}
-
-// Hint at the start of a run: how far you are in this city.
-private fun progressHint(rs: RouteState, good: Int): String {
-    if (rs.kitNeeded()) return "Keep running calls here to earn credits for the Level " + (rs.level + 1) + " kit."
-    if (rs.cityCleared()) return "Every city cleared. Keep running calls for credits and upgrades."
-    val left = RUNS_PER_CITY - good
-    val runs = if (left == 1) "1 more run" else "$left more runs"
-    return if (rs.idx < 4) "$runs with no F to reach City " + (rs.idx + 2) + "."
-        else "$runs with no F to clear City 5."
 }
 
 @Composable
@@ -354,7 +365,7 @@ private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone:
                         .padding(horizontal = 7.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        if (kitNeeded) "KIT NEEDED" else "ALL CLEARED", color = InkText,
+                        if (kitNeeded) "SEE DR. RAY" else "ALL CLEARED", color = InkText,
                         fontSize = 10.sp, fontWeight = FontWeight.Bold
                     )
                 }
@@ -530,13 +541,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                 scale(sc, Offset.Zero) { paramedic(player.female, player.skin, player.hairStyle, player.hairColor, player.uniform) }
             }
         }) { onPick(1) }
-        DrawerItem("Medical kit", "Level " + rs.level + " · " + kitNames[rs.level - 1], {
-            val s = size.width
-            drawRoundRect(Color.White, Offset(s * 0.1f, s * 0.2f), Size(s * 0.8f, s * 0.66f), CornerRadius(s * 0.1f, s * 0.1f))
-            drawRoundRect(Color.White, Offset(s * 0.35f, s * 0.1f), Size(s * 0.3f, s * 0.16f), CornerRadius(s * 0.05f, s * 0.05f), style = Stroke(s * 0.05f))
-            drawRect(RouteRed, Offset(s * 0.43f, s * 0.33f), Size(s * 0.14f, s * 0.4f))
-            drawRect(RouteRed, Offset(s * 0.3f, s * 0.46f), Size(s * 0.4f, s * 0.14f))
-        }) { onPick(5) }
+        DrawerItem(DR_NAME, "Learn tests and treatments", { doctorIcon() }) { onPick(5) }
         DrawerItem("Settings", "Sound and drive scenes", {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.width * 0.28f
