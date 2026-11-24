@@ -46,12 +46,12 @@ private val Marker = Color(0xFFC4161C)
 private val PassGreen = Color(0xFF2E9E2A)
 
 // Run grade card: a tan card tilted 30 degrees counter-clockwise with
-// hand-written grades. A PASS or FAIL stamp lands on it after 10 seconds.
+// hand-written grades. A PASS or FAIL stamp lands on it after 5 seconds.
 @Composable
 fun GradeCard(rs: RouteState, onNext: () -> Unit) {
     var stamp by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(10000)
+        delay(5000)
         stamp = true
     }
     val pass = rs.passed()
