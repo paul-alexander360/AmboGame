@@ -58,6 +58,8 @@ class RouteState(val player: PlayerData) {
     var runOver by mutableStateOf(false)
     var failReason by mutableStateOf("")
     var earned by mutableIntStateOf(0)
+    // Hearts earned this run: straight A's and character level ups
+    var heartsEarned by mutableIntStateOf(0)
     var gTo by mutableIntStateOf(-1)
     var gExam by mutableIntStateOf(-1)
     var gHosp by mutableIntStateOf(-1)
@@ -65,12 +67,16 @@ class RouteState(val player: PlayerData) {
     var nExam by mutableStateOf("")
     var nHosp by mutableStateOf("")
     private var awarded = false
+    // True once a leg was driven with the Siren boost. The boost is used up when the next run starts.
+    private var boostUsed = false
     // True when the last finished run had no F and filled a dot
     var counted by mutableStateOf(false)
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
     private var hospCycle = -1
-    var patient by mutableStateOf(Patient.make(player.cityLevel))
+    // The patient is made from a seed so a Hearts retry can bring back the same patient
+    private var patientSeed = Random.nextLong()
+    var patient by mutableStateOf(Patient(player.cityLevel, Random(patientSeed)))
 
     private fun makeCity(l: Int, i: Int): CityData {
         val c = CityData(l, i, Random.nextLong())
@@ -199,9 +205,15 @@ class RouteState(val player: PlayerData) {
         version++
     }
 
-    private fun resetRun() {
+    private fun resetRun(samePatient: Boolean = false) {
         popup = null
-        patient = Patient.make(level)
+        if (!samePatient) patientSeed = Random.nextLong()
+        if (boostUsed) {
+            boostUsed = false
+            player.boost = false
+            player.save()
+        }
+        patient = Patient(level, Random(patientSeed))
         stage = 0
         path.clear()
         fastPath.clear()
@@ -215,6 +227,7 @@ class RouteState(val player: PlayerData) {
         runOver = false
         failReason = ""
         earned = 0
+        heartsEarned = 0
         awarded = false
         counted = false
         gTo = -1
@@ -262,6 +275,27 @@ class RouteState(val player: PlayerData) {
             resetRun()
             version++
         }
+    }
+
+    // Testing page: go straight to a level and city with some runs already done
+    fun jumpTo(l: Int, i: Int, runs: Int) {
+        load(l.coerceIn(1, MAX_LEVEL), i.coerceIn(0, 4))
+        player.goodRuns = runs.coerceIn(0, RUNS_PER_CITY)
+        player.save()
+    }
+
+    // Your time on a route. The Siren boost makes it 15% faster.
+    fun userTime(p: List<Int>): Double = city.pathTime(p) * (if (player.boost) 1.0 - BOOST_SPEEDUP else 1.0)
+
+    // A failed run can be redone with Hearts: same city, same call, same patient
+    fun canRetry(): Boolean = runOver && !passed()
+
+    fun retry(): Boolean {
+        if (!canRetry()) return false
+        if (!player.spendHearts(RETRY_COST)) return false
+        resetRun(true)
+        version++
+        return true
     }
 
     fun nextRun() {
@@ -314,8 +348,13 @@ class RouteState(val player: PlayerData) {
         awarded = true
         val c = xpFor(gTo) + xpFor(gExam) + xpFor(gHosp)
         earned = c
+        val lvBefore = player.level
         player.credits += c
         player.totalXp += c
+        var h = (player.level - lvBefore) * HEARTS_PER_LEVEL
+        if (gTo == 0 && gExam == 0 && gHosp == 0) h += HEARTS_STRAIGHT_A
+        heartsEarned = h
+        player.hearts += h
         if (passed() && player.goodRuns < RUNS_PER_CITY) {
             player.goodRuns++
             counted = true
@@ -324,8 +363,9 @@ class RouteState(val player: PlayerData) {
     }
 
     private fun finalizeLeg() {
-        val user = city.pathTime(path.toList())
+        val user = userTime(path.toList())
         val fast = fastest()
+        if (player.boost) boostUsed = true
         accSeg = -1
         accType = ""
         loop@ for (k in 1 until path.size) {
