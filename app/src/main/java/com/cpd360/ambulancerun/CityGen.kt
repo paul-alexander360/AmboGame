@@ -110,10 +110,19 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             }
         }
         val used = HashSet<Int>()
+        // Station, hospitals and the call sit at least 2 blocks apart. If a small city
+        // runs out of room the gap drops to 1 block, then to any free spot.
+        val placed = ArrayList<Slot>()
         fun pick(): Slot {
+            var tries = 0
             while (true) {
                 val s = Slot(rnd.nextInt(n), rnd.nextInt(n), rnd.nextInt(4))
-                if (used.add(key(s))) return s
+                tries++
+                val gap = if (tries < 500) 2 else if (tries < 1000) 1 else 0
+                if (placed.all { blockGap(it, s) >= gap } && used.add(key(s))) {
+                    placed.add(s)
+                    return s
+                }
             }
         }
         val usedNames = HashSet<String>()
@@ -210,12 +219,25 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
 
     fun key(s: Slot): Int = (s.br * n + s.bc) * 4 + s.corner
 
+    // Blocks between two spots: 0 is the same block, 1 is a touching block (corners count)
+    fun blockGap(a: Slot, b: Slot): Int = maxOf(abs(a.bc - b.bc), abs(a.br - b.br))
+
+    // A new call at least 2 blocks from the station and every hospital, when there is room
     fun newCall() {
-        var s: Slot
-        do {
-            s = Slot(rnd.nextInt(n), rnd.nextInt(n), rnd.nextInt(4))
-        } while (key(s) == key(station) || hospKey.containsKey(key(s)) || key(s) == key(call))
-        call = s
+        val others = ArrayList<Slot>()
+        others.add(station)
+        for (h in hospitals) others.add(h.slot)
+        var tries = 0
+        while (true) {
+            val s = Slot(rnd.nextInt(n), rnd.nextInt(n), rnd.nextInt(4))
+            tries++
+            val gap = if (tries < 500) 2 else if (tries < 1000) 1 else 0
+            if (key(s) == key(station) || hospKey.containsKey(key(s)) || key(s) == key(call)) continue
+            if (others.all { blockGap(it, s) >= gap }) {
+                call = s
+                return
+            }
+        }
     }
 
     fun nodeX(i: Int): Float = 19f + 80f * i
@@ -393,19 +415,20 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     }
 
     // Best time from starts to goals. std = true times it for the standard medic of this level.
-    fun fastest(starts: IntArray, goals: IntArray, std: Boolean = false): Double {
+    // avoid: road corners the route can't pass through (beside a wrong hospital, where the drive would end).
+    fun fastest(starts: IntArray, goals: IntArray, std: Boolean = false, avoid: IntArray = IntArray(0)): Double {
         val total = m * m
         val dist = DoubleArray(total) { Double.MAX_VALUE }
         val prev = IntArray(total) { -1 }
-        return search(starts, goals, std, dist, prev)
+        return search(starts, goals, std, dist, prev, avoid)
     }
 
     // The nodes of the best route from starts to goals, start first. Empty if there is none.
-    fun fastestPath(starts: IntArray, goals: IntArray, std: Boolean = false): List<Int> {
+    fun fastestPath(starts: IntArray, goals: IntArray, std: Boolean = false, avoid: IntArray = IntArray(0)): List<Int> {
         val total = m * m
         val dist = DoubleArray(total) { Double.MAX_VALUE }
         val prev = IntArray(total) { -1 }
-        search(starts, goals, std, dist, prev)
+        search(starts, goals, std, dist, prev, avoid)
         var end = -1
         for (g in goals) if (dist[g] < Double.MAX_VALUE && (end == -1 || dist[g] < dist[end])) end = g
         if (end == -1) return emptyList()
@@ -419,11 +442,13 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         return out
     }
 
-    private fun search(starts: IntArray, goals: IntArray, std: Boolean, dist: DoubleArray, prev: IntArray): Double {
+    private fun search(starts: IntArray, goals: IntArray, std: Boolean, dist: DoubleArray, prev: IntArray, avoid: IntArray): Double {
         val total = m * m
         val seen = BooleanArray(total)
         val isGoal = BooleanArray(total)
         for (g in goals) isGoal[g] = true
+        val blocked = BooleanArray(total)
+        for (a in avoid) if (!isGoal[a]) blocked[a] = true
         for (s in starts) dist[s] = 0.0
         repeat(total) {
             var u = -1
@@ -433,7 +458,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             if (u == -1) return@repeat
             seen[u] = true
             for (v in nbr(u)) {
-                if (canGo(u, v)) {
+                if (canGo(u, v) && !blocked[v]) {
                     val c = dist[u] + segTime(u, v, std) + (if (isGoal[v]) 0.0 else nodeTime(v, std))
                     if (c < dist[v]) {
                         dist[v] = c
