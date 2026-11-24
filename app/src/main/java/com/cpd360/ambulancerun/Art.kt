@@ -19,8 +19,12 @@ val HairCols = listOf(Color(0xFFFFD54F), Color(0xFF6B3E26), Color(0xFF2B2B2B), C
 val HairNames = listOf("Blond", "Brunette", "Black", "Red")
 val UniformCols = listOf(Color(0xFF1E3A8A), Color(0xFF263238), Color(0xFFB71C1C), Color(0xFF2E7D32))
 val UniformNames = listOf("Navy", "Charcoal", "Red", "Green")
-val AmbColors = listOf(Color(0xFFEE1010), Color(0xFFF4F4F4), Color(0xFFFFC107), Color(0xFF1E88E5), Color(0xFF43A047))
-val AmbColorNames = listOf("Red", "White", "Yellow", "Blue", "Green")
+// The first 5 paints unlock with the patient compartment. From FIRST_HEART_PAINT on they are bought with Hearts.
+val AmbColors = listOf(
+    Color(0xFFEE1010), Color(0xFFF4F4F4), Color(0xFFFFC107), Color(0xFF1E88E5), Color(0xFF43A047),
+    Color(0xFFEC407A), Color(0xFF7E57C2), Color(0xFF263238)
+)
+val AmbColorNames = listOf("Red", "White", "Yellow", "Blue", "Green", "Pink", "Purple", "Midnight")
 
 private const val OUT = 22f
 
