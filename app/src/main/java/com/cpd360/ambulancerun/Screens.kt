@@ -332,22 +332,22 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
         UpgradeCard("🚑", "Driving skill", "Faster drive times on every road.", player.charUp[SKILL_DRIVE], player.credits) {
             player.buyChar(SKILL_DRIVE)
         }
-        UpgradeCard("🚶", "Pedestrian awareness", "Fewer pedestrians step out in front of you.", player.charUp[SKILL_PED], player.credits) {
+        UpgradeCard("🚶", "Pedestrian awareness", "Crash risk down 8% per level.", player.charUp[SKILL_PED], player.credits) {
             player.buyChar(SKILL_PED)
         }
-        UpgradeCard("🚗", "Crash avoidance", "Fewer car crashes on the way.", player.charUp[SKILL_CRASH], player.credits) {
+        UpgradeCard("🚗", "Crash avoidance", "Crash risk down 8% per level.", player.charUp[SKILL_CRASH], player.credits) {
             player.buyChar(SKILL_CRASH)
         }
     }
 }
 
 private val ambParts = listOf(
-    Triple("◎", "Tires", "Faster speed. Higher levels lower the chance of an accident."),
+    Triple("◎", "Tires", "Faster speed."),
     Triple("⚙", "Engine", "Faster speed."),
-    Triple("▣", "Brakes", "Lower chance of an accident."),
-    Triple("☀", "Lights", "Lower chance of an accident and quicker through intersections."),
-    Triple("🔊", "Siren", "Lower chance of an accident and quicker through intersections."),
-    Triple("🚚", "Cab", "Faster speed, lower chance of an accident and fewer pedestrians."),
+    Triple("▣", "Brakes", "Crash risk down 4% per level."),
+    Triple("☀", "Lights", "Crash risk down 4% per level and quicker through intersections."),
+    Triple("🔊", "Siren", "Crash risk down 4% per level and quicker through intersections."),
+    Triple("🚚", "Cab", "Faster speed."),
     Triple("✚", "Patient compartment", "Needed to move up levels. Unlocks more tests, treatments and paint colors.")
 )
 
