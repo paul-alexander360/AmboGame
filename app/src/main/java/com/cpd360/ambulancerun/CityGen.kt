@@ -88,18 +88,8 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     private val suffixes = listOf("Hospital", "Medical Center")
 
     init {
-        for (i in 0 until n * n) {
-            val r = rnd.nextInt(100)
-            zone[i] = if (r < 45) 0 else if (r < 75) 1 else 2
-            dens[i] = rnd.nextInt(3)
-        }
-        for (t in 0..2) {
-            while (zone.count { it == t } < 2) {
-                val big = (0..2).maxByOrNull { k -> zone.count { it == k } } ?: 0
-                val cands = (0 until n * n).filter { zone[it] == big }
-                zone[cands[rnd.nextInt(cands.size)]] = t
-            }
-        }
+        makeZones()
+        makeDensity()
         for (k in qH.indices) qH[k] = roadQuality()
         for (k in qV.indices) qV[k] = roadQuality()
         for (k in light.indices) light[k] = rnd.nextInt(100) < 35
@@ -134,6 +124,69 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             hospKey[key(s)] = lv
         }
         call = pick()
+    }
+
+    // Blocks that share a side with block i
+    private fun nbrBlocks(i: Int): IntArray {
+        val c = i % n
+        val r = i / n
+        val l = ArrayList<Int>(4)
+        if (c > 0) l.add(i - 1)
+        if (c < n - 1) l.add(i + 1)
+        if (r > 0) l.add(i - n)
+        if (r < n - 1) l.add(i + n)
+        return l.toIntArray()
+    }
+
+    // Block types are random, but every block touches at least one block of its own type,
+    // so no type shows up as a single block. Each type gets at least 2 blocks.
+    private fun makeZones() {
+        val total = n * n
+        for (attempt in 0 until 50) {
+            for (i in 0 until total) {
+                val r = rnd.nextInt(100)
+                zone[i] = if (r < 45) 0 else if (r < 75) 1 else 2
+            }
+            for (t in 0..2) {
+                if (zone.count { it == t } < 2) {
+                    val i = rnd.nextInt(total)
+                    val nb = nbrBlocks(i)
+                    zone[i] = t
+                    zone[nb[rnd.nextInt(nb.size)]] = t
+                }
+            }
+            for (pass in 0 until 10) {
+                var changed = false
+                for (i in 0 until total) {
+                    val nb = nbrBlocks(i)
+                    if (nb.none { zone[it] == zone[i] }) {
+                        zone[i] = zone[nb[rnd.nextInt(nb.size)]]
+                        changed = true
+                    }
+                }
+                if (!changed) break
+            }
+            if ((0..2).all { t -> zone.count { it == t } >= 2 }) return
+        }
+    }
+
+    // Density is random, but it changes in steps: low only touches low or medium,
+    // and high only touches medium or high.
+    private fun makeDensity() {
+        val total = n * n
+        for (i in 0 until total) dens[i] = rnd.nextInt(3)
+        for (pass in 0 until 30) {
+            var changed = false
+            for (i in 0 until total) {
+                for (k in nbrBlocks(i)) {
+                    if (abs(dens[i] - dens[k]) > 1) {
+                        if (rnd.nextBoolean()) dens[i] = 1 else dens[k] = 1
+                        changed = true
+                    }
+                }
+            }
+            if (!changed) break
+        }
     }
 
     private fun genName(used: HashSet<String>): String {
@@ -343,6 +396,31 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     fun fastest(starts: IntArray, goals: IntArray, std: Boolean = false): Double {
         val total = m * m
         val dist = DoubleArray(total) { Double.MAX_VALUE }
+        val prev = IntArray(total) { -1 }
+        return search(starts, goals, std, dist, prev)
+    }
+
+    // The nodes of the best route from starts to goals, start first. Empty if there is none.
+    fun fastestPath(starts: IntArray, goals: IntArray, std: Boolean = false): List<Int> {
+        val total = m * m
+        val dist = DoubleArray(total) { Double.MAX_VALUE }
+        val prev = IntArray(total) { -1 }
+        search(starts, goals, std, dist, prev)
+        var end = -1
+        for (g in goals) if (dist[g] < Double.MAX_VALUE && (end == -1 || dist[g] < dist[end])) end = g
+        if (end == -1) return emptyList()
+        val out = ArrayList<Int>()
+        var u = end
+        while (u != -1) {
+            out.add(u)
+            u = prev[u]
+        }
+        out.reverse()
+        return out
+    }
+
+    private fun search(starts: IntArray, goals: IntArray, std: Boolean, dist: DoubleArray, prev: IntArray): Double {
+        val total = m * m
         val seen = BooleanArray(total)
         val isGoal = BooleanArray(total)
         for (g in goals) isGoal[g] = true
@@ -357,7 +435,10 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             for (v in nbr(u)) {
                 if (canGo(u, v)) {
                     val c = dist[u] + segTime(u, v, std) + (if (isGoal[v]) 0.0 else nodeTime(v, std))
-                    if (c < dist[v]) dist[v] = c
+                    if (c < dist[v]) {
+                        dist[v] = c
+                        prev[v] = u
+                    }
                 }
             }
         }
