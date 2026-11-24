@@ -156,7 +156,8 @@ class RouteState(val player: PlayerData) {
         return l.toIntArray()
     }
 
-    fun fastest(): Double = city.fastest(starts(), goals())
+    // Target time: the standard medic's best route for this level
+    fun fastest(): Double = city.fastest(starts(), goals(), true)
 
     // Chance of an accident on the route drawn so far, after skills and upgrades
     fun routeRisk(): Double {
@@ -334,7 +335,7 @@ class RouteState(val player: PlayerData) {
         else if (user > fast * 1.6) fail = "Too slow"
         val g = if (fail != "") 3 else grade
         val note = if (accSeg >= 0) "accident" else if (wrongHospital()) "wrong hospital"
-            else fmt(user) + " (best " + fmt(fast) + ")"
+            else fmt(user) + " (target " + fmt(fast) + ")"
         if (stage == 0) {
             gTo = g
             nTo = note
