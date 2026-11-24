@@ -36,10 +36,9 @@ fun xpFor(grade: Int): Int = when (grade) {
 }
 
 class RouteState(val player: PlayerData) {
-    var level by mutableIntStateOf(1)
-    var idx by mutableIntStateOf(0)
-    var run by mutableIntStateOf(1)
-    var city by mutableStateOf(makeCity(1, 0))
+    var level by mutableIntStateOf(player.cityLevel)
+    var idx by mutableIntStateOf(player.cityIdx)
+    var city by mutableStateOf(makeCity(player.cityLevel, player.cityIdx))
     var version by mutableIntStateOf(0)
     var stage by mutableIntStateOf(0)
     val path = mutableStateListOf<Int>()
@@ -63,10 +62,12 @@ class RouteState(val player: PlayerData) {
     var nExam by mutableStateOf("")
     var nHosp by mutableStateOf("")
     private var awarded = false
+    // True when the last finished run had no F and filled a dot
+    var counted by mutableStateOf(false)
     var focusTick by mutableIntStateOf(0)
     var focusPt by mutableStateOf(Offset.Zero)
     private var hospCycle = -1
-    var patient by mutableStateOf(Patient.make(1))
+    var patient by mutableStateOf(Patient.make(player.cityLevel))
 
     private fun makeCity(l: Int, i: Int): CityData {
         val c = CityData(l, i, Random.nextLong())
@@ -165,7 +166,10 @@ class RouteState(val player: PlayerData) {
     fun load(l: Int, i: Int) {
         level = l
         idx = i
-        run = 1
+        player.cityLevel = l
+        player.cityIdx = i
+        player.goodRuns = 0
+        player.save()
         city = makeCity(l, i)
         hospCycle = -1
         resetRun()
@@ -187,6 +191,7 @@ class RouteState(val player: PlayerData) {
         failReason = ""
         earned = 0
         awarded = false
+        counted = false
         gTo = -1
         gExam = -1
         gHosp = -1
@@ -203,25 +208,40 @@ class RouteState(val player: PlayerData) {
         version++
     }
 
-    private fun advanceCity() {
-        var l = level
-        var i = idx + 1
-        if (i > 4) {
-            i = 0
-            l++
-            if (l > 8) l = 1
-        }
-        load(l, i)
+    // City 5 is cleared: 5 good runs there
+    fun cityCleared(): Boolean = idx == 4 && player.goodRuns >= RUNS_PER_CITY
+
+    // City 5 is cleared and there is a next level kit to buy
+    fun kitNeeded(): Boolean = cityCleared() && level < MAX_LEVEL
+
+    fun nextKitCost(): Int = kitCost(level + 1)
+
+    // Buy the next level's kit and move to City 1 of that level
+    fun buyKit(): Boolean {
+        if (!kitNeeded()) return false
+        val c = nextKitCost()
+        if (player.credits < c) return false
+        player.credits -= c
+        load(level + 1, 0)
+        return true
     }
 
+    // Testing button: moves to the next city. In City 5 it fills the runs so the kit can be bought.
     fun nextCity() {
-        advanceCity()
+        if (idx < 4) {
+            load(level, idx + 1)
+        } else {
+            player.goodRuns = RUNS_PER_CITY
+            player.save()
+            city.newCall()
+            resetRun()
+            version++
+        }
     }
 
     fun nextRun() {
-        run++
-        if (run > 5) {
-            advanceCity()
+        if (player.goodRuns >= RUNS_PER_CITY && idx < 4) {
+            load(level, idx + 1)
         } else {
             city.newCall()
             resetRun()
@@ -269,6 +289,10 @@ class RouteState(val player: PlayerData) {
         earned = c
         player.credits += c
         player.totalXp += c
+        if (passed() && player.goodRuns < RUNS_PER_CITY) {
+            player.goodRuns++
+            counted = true
+        }
         player.save()
     }
 
