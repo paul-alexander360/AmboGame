@@ -1,12 +1,15 @@
 package com.cpd360.ambulancerun
 
+import androidx.compose.animation.core.FloatExponentialDecaySpec
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -16,15 +19,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -42,9 +49,14 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -82,7 +94,19 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
     var sz by remember { mutableStateOf(IntSize.Zero) }
     var lastTapT by remember { mutableLongStateOf(0L) }
     var lastTapP by remember { mutableStateOf(Offset.Zero) }
+    // Where the finger is while drawing a route, so a lighter lead line can follow it
+    var lead by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
+    val scope = rememberCoroutineScope()
+    val fling = remember { arrayOfNulls<Job>(1) }
+    // The city only needs painting again when the run changes or zoom crosses a detail step
+    val tier by remember(city) {
+        derivedStateOf {
+            val sc = if (sz.width > 0) sz.width / city.w * zm else 1f
+            if (sc >= 2f) 2 else if (sc >= 1.5f) 1 else 0
+        }
+    }
     LaunchedEffect(rs.version, rs.stage, sz) {
+        fling[0]?.cancel()
         if (sz.width > 0) {
             val w = sz.width.toFloat()
             val h = sz.height.toFloat()
@@ -96,6 +120,7 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
         }
     }
     LaunchedEffect(rs.focusTick) {
+        fling[0]?.cancel()
         if (rs.focusTick > 0 && sz.width > 0) {
             val w = sz.width.toFloat()
             val h = sz.height.toFloat()
@@ -111,6 +136,7 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
     Box(
         modifier
             .clipToBounds()
+            .background(Asphalt)
             .onSizeChanged { sz = it }
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -119,6 +145,8 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                     val h = size.height.toFloat()
                     val s0 = w / cty.w
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    // A new touch catches the map if it is still gliding
+                    fling[0]?.cancel()
                     val m0 = (down.position - mapOrigin(cty, w, h, s0, zm, pan)) / (s0 * zm)
                     val last = if (rs.path.isEmpty()) rs.startPt() else Offset(
                         cty.nodeX(rs.path.last() % cty.m), cty.nodeY(rs.path.last() / cty.m)
@@ -127,13 +155,18 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                     if (tracing) rs.begin()
                     var moved = false
                     var lastT = down.uptimeMillis
+                    val vt = VelocityTracker()
+                    var flingOk = false
                     do {
                         val ev = awaitPointerEvent()
                         lastT = ev.changes[0].uptimeMillis
                         val pressed = ev.changes.count { it.pressed }
                         if (pressed >= 2) {
                             tracing = false
+                            lead = null
                             moved = true
+                            flingOk = false
+                            vt.resetTracking()
                             val pr = ev.changes.filter { it.pressed }
                             var sx = 0f
                             var sy = 0f
@@ -166,22 +199,33 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                             if ((chg.position - down.position).getDistance() > 12f) moved = true
                             if (tracing) {
                                 val mp = (chg.position - mapOrigin(cty, w, h, s0, zm, pan)) / (s0 * zm)
-                                var best = -1
-                                var bd = 24f
-                                for (j in 0..cty.n) for (i in 0..cty.n) {
-                                    val d = hypot(mp.x - cty.nodeX(i), mp.y - cty.nodeY(j))
-                                    if (d < bd) {
-                                        bd = d
-                                        best = j * cty.m + i
-                                    }
-                                }
-                                if (best >= 0) rs.move(best)
+                                lead = traceTo(rs, mp)
                             } else {
                                 pan = clampPan(pan + chg.positionChange(), cty, w, h, s0, zm)
+                                vt.addPosition(chg.uptimeMillis, chg.position)
+                                flingOk = true
                             }
                             chg.consume()
                         }
                     } while (ev.changes.any { it.pressed })
+                    lead = null
+                    // A flick keeps the map gliding, slowing to a stop
+                    if (flingOk && moved) {
+                        val v = vt.calculateVelocity()
+                        val speed = hypot(v.x, v.y)
+                        if (speed > 300f) {
+                            val dir = Offset(v.x / speed, v.y / speed)
+                            fling[0] = scope.launch {
+                                var prev = 0f
+                                animateDecay(0f, speed, FloatExponentialDecaySpec(1.6f)) { value, _ ->
+                                    val np = clampPan(pan + dir * (value - prev), cty, w, h, s0, zm)
+                                    prev = value
+                                    if (np == pan) throw CancellationException()
+                                    pan = np
+                                }
+                            }
+                        }
+                    }
                     if (!moved && lastT - down.uptimeMillis < 300L) {
                         if (lastT - lastTapT < 350L && (down.position - lastTapP).getDistance() < 60f) {
                             val tp = (down.position - mapOrigin(cty, w, h, s0, zm, pan)) / (s0 * zm)
@@ -200,13 +244,21 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                 }
             }
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val s0 = size.width / city.w
-            val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
-            drawRect(Asphalt)
-            translate(o.x, o.y) {
-                scale(s0 * zm, Offset.Zero) { drawStatic(city, s0 * zm) }
+        // The city is painted once into its own layer, then only slid and scaled while you pan and zoom.
+        // It is painted again only for a new run or when zoom crosses a detail step.
+        Canvas(
+            Modifier.fillMaxSize().graphicsLayer {
+                val s0 = size.width / city.w
+                val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
+                transformOrigin = TransformOrigin(0f, 0f)
+                translationX = o.x
+                translationY = o.y
+                scaleX = s0 * zm
+                scaleY = s0 * zm
             }
+        ) {
+            rs.version
+            drawStatic(city, when (tier) { 2 -> 2f; 1 -> 1.5f; else -> 1f })
         }
         // The route is built once each time it changes, then only drawn each frame for the pulse
         Box(Modifier.fillMaxSize().drawWithCache {
@@ -215,7 +267,11 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
                 val s0 = size.width / city.w
                 val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
                 translate(o.x, o.y) {
-                    scale(s0 * zm, Offset.Zero) { drawDynamic(rs, p, rd) }
+                    scale(s0 * zm, Offset.Zero) {
+                        drawDynamic(rs, p, rd)
+                        val ld = lead
+                        if (ld != null) leadLine(ld.first, ld.second)
+                    }
                 }
             }
         })
@@ -655,11 +711,81 @@ private fun DrawScope.ambFront(x: Float, y: Float) = translate(x, y) {
 
 // One route line: soft glow, drop shadow, main stroke and a thin highlight
 private fun DrawScope.routeLine(path: Path, main: Color, shade: Color, hi: Color) {
-    val rst = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round) }
+    // Turns get a gentle curve instead of a sharp corner
+    val bend = PathEffect.cornerPathEffect(14f)
+    val rst = { w: Float -> Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round, pathEffect = bend) }
     drawPath(path, main, alpha = 0.10f, style = rst(9f))
     translate(0f, 2.2f) { drawPath(path, shade, alpha = 0.55f, style = rst(6f)) }
     drawPath(path, main, style = rst(6f))
     translate(0f, -1.3f) { drawPath(path, hi, style = rst(2f)) }
+}
+
+// The lighter line that runs down the road from the last corner to the finger
+private fun DrawScope.leadLine(a: Offset, b: Offset) {
+    drawLine(Color(0xFF7FB0FF), a, b, 9f, StrokeCap.Round, alpha = 0.10f)
+    drawLine(Color(0xFF7FB0FF), a, b, 5f, StrokeCap.Round, alpha = 0.75f)
+}
+
+// Grows or shrinks the route as the finger moves along the roads.
+// The next corner locks in once the finger is past halfway down the block, and a fast swipe
+// fills in every corner it crossed. Going back to within 32 of the corner before takes the last one off.
+// Returns the lead line to draw (from, to), or null when there is none.
+private fun traceTo(rs: RouteState, mp: Offset): Pair<Offset, Offset>? {
+    val c = rs.city
+    val pt = { u: Int -> Offset(c.nodeX(u % c.m), c.nodeY(u / c.m)) }
+    for (guard in 0 until 64) {
+        if (rs.done) return null
+        if (rs.path.isEmpty()) {
+            val sp = rs.startPt()
+            val d = mp - sp
+            var best = -1
+            var bt = 0f
+            var bd = 28f
+            for (s in rs.starts()) {
+                val e = pt(s) - sp
+                val len = e.getDistance()
+                if (len < 1f) continue
+                val ux = e.x / len
+                val uy = e.y / len
+                val along = d.x * ux + d.y * uy
+                val perp = abs(d.x * uy - d.y * ux)
+                if (along > 0f && perp < bd) {
+                    bd = perp
+                    best = s
+                    bt = along / len
+                }
+            }
+            if (best < 0) return null
+            if (bt < 0.5f) return sp to (sp + (pt(best) - sp) * bt)
+            rs.move(best)
+            if (rs.path.isEmpty()) return null
+            continue
+        }
+        val ln = rs.path.last()
+        val lp = pt(ln)
+        val d = mp - lp
+        val horiz = abs(d.x) >= abs(d.y)
+        val along = if (horiz) d.x else d.y
+        val perp = abs(if (horiz) d.y else d.x)
+        if (perp > 28f || abs(along) < 2f) return null
+        val step = if (along > 0f) 1 else -1
+        val ni = ln % c.m + (if (horiz) step else 0)
+        val nj = ln / c.m + (if (horiz) 0 else step)
+        if (ni < 0 || ni > c.n || nj < 0 || nj > c.n) return null
+        val nn = nj * c.m + ni
+        val back = rs.path.size > 1 && nn == rs.path[rs.path.size - 2]
+        if (back) {
+            if (abs(along) < 48f) return null
+            rs.move(nn)
+            continue
+        }
+        if (!c.canGo(ln, nn) || rs.path.contains(nn)) return null
+        if (abs(along) < 40f) return lp to (lp + (pt(nn) - lp) * (abs(along) / 80f))
+        val before = rs.path.size
+        rs.move(nn)
+        if (rs.path.size == before) return null
+    }
+    return null
 }
 
 // The route lines for the map, built only when the route changes
