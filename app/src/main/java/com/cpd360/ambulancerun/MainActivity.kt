@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +70,7 @@ private fun NavBtn(kind: Int, onClick: () -> Unit) {
             .size(46.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Glass)
+            .border(1.dp, GlassLine, RoundedCornerShape(14.dp))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -210,7 +212,7 @@ fun HomeScreen(version: String, player: PlayerData) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF9BD468))
+            .background(Color(0xFF2A2D31))
     ) {
         CityMap(rs, Modifier.fillMaxSize())
         val pop = rs.popup
@@ -264,6 +266,7 @@ fun HomeScreen(version: String, player: PlayerData) {
                     .safeDrawingPadding()
                     .padding(10.dp)
                     .background(Glass, RoundedCornerShape(20.dp))
+                    .border(1.dp, GlassLine, RoundedCornerShape(20.dp))
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -306,7 +309,7 @@ fun HomeScreen(version: String, player: PlayerData) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color(0x73141830))
+                    .background(Color(0x8C06080E))
                     .clickable { menu = false }
             )
             Drawer(player, rs, version, { menu = false }) { pick ->
@@ -344,6 +347,7 @@ private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone:
         modifier = Modifier
             .fillMaxWidth()
             .background(Glass, RoundedCornerShape(18.dp))
+            .border(1.dp, GlassLine, RoundedCornerShape(18.dp))
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -377,7 +381,7 @@ private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone:
                         .padding(horizontal = 7.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        if (kitNeeded) "SEE DR. RAY" else "ALL CLEARED", color = InkText,
+                        if (kitNeeded) "SEE DR. RAY" else "ALL CLEARED", color = DarkInk,
                         fontSize = 10.sp, fontWeight = FontWeight.Bold
                     )
                 }
@@ -436,7 +440,7 @@ private fun RiskPill(risk: Double, withWord: Boolean) {
         Spacer(Modifier.width(6.dp))
         Text(
             "Crash risk " + "%.1f".format(pct) + "%" + (if (withWord) word else ""),
-            color = InkText, fontSize = 13.sp, fontWeight = FontWeight.Bold
+            color = DarkInk, fontSize = 13.sp, fontWeight = FontWeight.Bold
         )
     }
 }
@@ -446,7 +450,8 @@ private fun HintPill(text: String, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xF2FFFFFF), RoundedCornerShape(14.dp))
+            .background(Color(0xB8122848), RoundedCornerShape(14.dp))
+            .border(1.dp, Color(0x4D8CBEFF), RoundedCornerShape(14.dp))
             .clickable { onClose() }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -454,7 +459,7 @@ private fun HintPill(text: String, onClose: () -> Unit) {
         Box(
             Modifier
                 .size(18.dp)
-                .background(Color(0xFF5B5F9A), CircleShape),
+                .background(Color(0xFF3A6BFF), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text("i", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -465,16 +470,7 @@ private fun HintPill(text: String, onClose: () -> Unit) {
 }
 
 @Composable
-private fun GoButton(label: String, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .background(Color(0xFF6FAE3E), RoundedCornerShape(14.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 24.dp, vertical = 11.dp)
-    ) {
-        Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-    }
-}
+private fun GoButton(label: String, onClick: () -> Unit) = GreenButton(label, onClick = onClick)
 
 @Composable
 private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose: () -> Unit, onPick: (Int) -> Unit) {
@@ -482,24 +478,21 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
         modifier = Modifier
             .fillMaxHeight()
             .width(296.dp)
-            .background(GlassSolid, RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp))
+            .background(Color(0xF212151D), RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp))
+            .border(1.dp, GlassLine, RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
             .safeDrawingPadding()
             .padding(horizontal = 14.dp, vertical = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val look = playerLook(player)
             Canvas(
                 Modifier
-                    .size(56.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
-                    .background(GlassLine)
+                    .border(2.dp, Color(0x40FFFFFF), CircleShape)
             ) {
-                val sc = size.width * 1.3f / 170f
-                translate(size.width / 2f - 85f * sc, size.height * 0.1f) {
-                    scale(sc, Offset.Zero) {
-                        paramedic(player.female, player.skin, player.hairStyle, player.hairColor, player.uniform)
-                    }
-                }
+                bustFramed(look, BG_BAY, FRAME_AVATAR)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -516,7 +509,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                         Modifier
                             .fillMaxWidth((player.totalXp % 500) / 500f)
                             .height(6.dp)
-                            .background(RouteRed, RoundedCornerShape(3.dp))
+                            .background(Brush.horizontalGradient(listOf(RouteRed, Color(0xFFFF7A5A))), RoundedCornerShape(3.dp))
                     )
                 }
             }
@@ -562,11 +555,11 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             val sc = size.width / 1780f
             translate(0f, size.height / 2f - 440f * sc) { scale(sc, Offset.Zero) { ambulanceSide(player.ambColor) } }
         }) { onPick(0) }
+        val me = playerLook(player)
         DrawerItem("Character", "Look and skills", {
-            val sc = size.height / 330f
-            translate(size.width / 2f - 85f * sc, 0f) {
-                scale(sc, Offset.Zero) { paramedic(player.female, player.skin, player.hairStyle, player.hairColor, player.uniform) }
-            }
+            val c = Path()
+            c.addOval(androidx.compose.ui.geometry.Rect(Offset.Zero, size))
+            clipPath(c) { bustFramed(me, BG_BAY, FRAME_AVATAR) }
         }) { onPick(1) }
         DrawerItem(DR_NAME, "Learn tests and treatments", { doctorIcon() }) { onPick(5) }
         DrawerItem("Settings", "Sound and drive scenes", {
@@ -578,7 +571,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                 }
             }
             drawCircle(Color.White, r, c)
-            drawCircle(GlassSolid, r * 0.42f, c)
+            drawCircle(Color(0xFF1A1E27), r * 0.42f, c)
         }) { onPick(2) }
         Box(
             Modifier
@@ -587,7 +580,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
                 .height(1.dp)
                 .background(GlassLine)
         )
-        Text("TESTING", color = Color(0xFF8E92C4), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text("TESTING", color = Color(0xFF7D8699), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         Spacer(Modifier.height(4.dp))
         DrawerItem("Test tools", "Credits, level, jump to city", {
             // Wrench: a handle and an open ring at the top
@@ -595,7 +588,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             rotate(45f, Offset(w / 2f, w / 2f)) {
                 drawRoundRect(Color.White, Offset(w * 0.43f, w * 0.38f), Size(w * 0.14f, w * 0.55f), CornerRadius(w * 0.07f))
                 drawCircle(Color.White, w * 0.2f, Offset(w / 2f, w * 0.28f))
-                drawRect(Color(0xFF585C84), Offset(w * 0.44f, w * 0.04f), Size(w * 0.12f, w * 0.22f))
+                drawRect(Color(0xFF1A1E27), Offset(w * 0.44f, w * 0.04f), Size(w * 0.12f, w * 0.22f))
             }
         }) { onPick(6) }
         Spacer(Modifier.height(8.dp))
@@ -606,7 +599,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
         Spacer(Modifier.weight(1f))
         Text(
             "Version $version  ·  Drive " + "%.3f".format(player.drive) + "  ·  Crash risk ×" + "%.2f".format(player.riskMult),
-            color = Color(0xFF8E92C4), fontSize = 11.sp
+            color = Color(0xFF7D8699), fontSize = 11.sp
         )
     }
 }
@@ -615,7 +608,8 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
 private fun StatTile(label: String, modifier: Modifier, content: @Composable () -> Unit) {
     Column(
         modifier = modifier
-            .background(GlassLine, RoundedCornerShape(12.dp))
+            .background(Color(0x0FFFFFFF), RoundedCornerShape(14.dp))
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         Text(label, color = GlassMute, fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -642,7 +636,8 @@ private fun DrawerItem(
             modifier = Modifier
                 .size(42.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(GlassLine),
+                .background(Color(0x12FFFFFF))
+                .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             Canvas(Modifier.size(32.dp)) { draw() }
@@ -652,7 +647,7 @@ private fun DrawerItem(
             Text(label, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text(sub, color = GlassMute, fontSize = 12.sp)
         }
-        Text("›", color = Color(0xFF8E92C4), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("›", color = Color(0xFF7D8699), fontSize = 22.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -661,11 +656,11 @@ private fun TestBtn(label: String, enabled: Boolean, modifier: Modifier, onClick
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .border(1.5.dp, if (enabled) Color(0xFF8E92C4) else GlassLine, RoundedCornerShape(10.dp))
+            .border(1.5.dp, if (enabled) Color(0xFF7D8699) else GlassLine, RoundedCornerShape(10.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 9.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, color = if (enabled) GlassMute else Color(0xFF6E72A4), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = if (enabled) GlassMute else Color(0xFF5D6576), fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
