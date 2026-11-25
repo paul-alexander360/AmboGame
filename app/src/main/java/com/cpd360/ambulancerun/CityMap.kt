@@ -628,7 +628,7 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
 }
 
 // Road events on the map: rush hour roads in red, the school zone in yellow, the train tracks,
-// cones on the closed block, and rain for a storm
+// cones on the closed block, rain for a storm and snow for snow
 private fun DrawScope.drawEvents(c: CityData) {
     val n = c.n
     val m = c.m
@@ -699,6 +699,17 @@ private fun DrawScope.drawEvents(c: CityData) {
             val x = ((k * 53) % c.w.toInt()).toFloat()
             val y = ((k * 97) % c.h.toInt()).toFloat()
             drawLine(rain, Offset(x, y), Offset(x - 3f, y + 10f), 1f, alpha = 0.35f)
+            k++
+        }
+    }
+    if (c.events.contains(EV_SNOW)) {
+        // a cold white dusting over the city and falling flakes
+        box(Color(0xFFDCE6F5), 0f, 0f, c.w, c.h, 0f, 0.22f)
+        var k = 0
+        while (k < (c.w * c.h / 700f).toInt()) {
+            val x = ((k * 53) % c.w.toInt()).toFloat()
+            val y = ((k * 97) % c.h.toInt()).toFloat()
+            drawCircle(Color.White, 0.8f + (k % 3) * 0.6f, Offset(x, y), alpha = 0.55f)
             k++
         }
     }

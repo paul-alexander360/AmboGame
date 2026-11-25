@@ -122,6 +122,8 @@ class PlayerData(private val ctx: Context) {
     // Settings
     var sirenSound by mutableStateOf(true)
     var driveScenes by mutableStateOf(true)
+    // Drive scene camera: true is the drone view above and behind the ambulance, false the cab
+    var droneView by mutableStateOf(true)
 
     // Guide tips already shown by Dot and Dr. Ray
     val tipsSeen = mutableStateListOf<String>()
@@ -266,6 +268,7 @@ class PlayerData(private val ctx: Context) {
             o.put("ambColor", ambColor)
             o.put("sirenSound", sirenSound)
             o.put("driveScenes", driveScenes)
+            o.put("droneView", droneView)
             o.put("charUp", JSONArray(charUp.toList()))
             o.put("ambUp", JSONArray(ambUp.toList()))
             o.put("tipsSeen", JSONArray(tipsSeen.toList()))
@@ -348,6 +351,7 @@ class PlayerData(private val ctx: Context) {
             if (!ownsPaint(ambColor)) ambColor = 0
             sirenSound = o.optBoolean("sirenSound", true)
             driveScenes = o.optBoolean("driveScenes", true)
+            droneView = o.optBoolean("droneView", true)
             readList(o, "charUp", charUp) { MAX_UP }
             readList(o, "ambUp", ambUp) { ambMax(it) }
             val ts = o.optJSONArray("tipsSeen")

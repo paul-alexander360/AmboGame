@@ -531,7 +531,7 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
                 player.sirenSound = it
                 player.save()
             }
-            SettingRow("Drive scenes", "Show the view from the driver seat after you trace a route.", player.driveScenes) {
+            SettingRow("Drive scenes", "Show the drive after you trace a route, from the cab or the drone.", player.driveScenes) {
                 player.driveScenes = it
                 player.save()
             }

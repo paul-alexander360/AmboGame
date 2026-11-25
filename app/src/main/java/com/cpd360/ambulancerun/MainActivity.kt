@@ -185,7 +185,12 @@ fun HomeScreen(version: String, player: PlayerData) {
                 chat = if (rs.stage == 1 && rs.accSeg < 0) rs.chat else emptyList(),
                 patient = rs.patient,
                 worse = rs.stage == 1 && rs.handoff && rs.worse >= 0 && !rs.worseAck,
-                back = { close -> BackCare(rs, true, onDone = close) }
+                back = { close -> BackCare(rs, true, onDone = close) },
+                drone = player.droneView,
+                onView = {
+                    player.droneView = it
+                    player.save()
+                }
             ) {
                 rs.driveShown = true
                 screen = 0

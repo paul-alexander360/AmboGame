@@ -13,14 +13,16 @@ const val EV_WORK = 1
 const val EV_TRAIN = 2
 const val EV_SCHOOL = 3
 const val EV_RUSH = 4
-val eventNames = listOf("Storm", "Road work", "Train crossing", "School zone", "Rush hour")
-val eventGlyphs = listOf("⛈", "🚧", "🚆", "🏫", "🚗")
+const val EV_SNOW = 5
+val eventNames = listOf("Storm", "Road work", "Train crossing", "School zone", "Rush hour", "Snow")
+val eventGlyphs = listOf("⛈", "🚧", "🚆", "🏫", "🚗", "❄")
 val eventTips = listOf(
     "A **storm** is soaking the city. Every road is a bit slower and crashes are more likely.",
     "**Road work** has closed one block. Look for the orange cones and drive around it.",
     "A **train** crosses the city. Each street that crosses the tracks adds a wait for the gates.",
     "There's a **school zone**. The streets around it are slow, but you won't crash there.",
-    "It's **rush hour**. The two main roads in red are packed, slow and riskier."
+    "It's **rush hour**. The two main roads in red are packed, slow and riskier.",
+    "**Snow** is falling and the roads are icy. Every road is slower and crashes are more likely."
 )
 
 object Levels {
@@ -112,6 +114,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     var rushRow = -1
     var rushCol = -1
     private var storm = false
+    private var snow = false
 
     init {
         makeZones()
@@ -165,11 +168,13 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     private fun makeEvents() {
         if (level < 2) return
         val count = if (level >= 4 && rnd.nextInt(100) < 40) 2 else 1
-        val pool = mutableListOf(EV_STORM, EV_WORK, EV_TRAIN, EV_SCHOOL, EV_RUSH)
+        val pool = mutableListOf(EV_STORM, EV_WORK, EV_TRAIN, EV_SCHOOL, EV_RUSH, EV_SNOW)
         repeat(count) {
             val e = pool.removeAt(rnd.nextInt(pool.size))
             when (e) {
-                EV_STORM -> storm = true
+                // a city gets a storm or snow, never both
+                EV_STORM -> { storm = true; pool.remove(EV_SNOW) }
+                EV_SNOW -> { snow = true; pool.remove(EV_STORM) }
                 EV_WORK -> if (!pickWork()) return@repeat
                 EV_TRAIN -> trainRow = rnd.nextInt(n)
                 EV_SCHOOL -> {
@@ -244,10 +249,10 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
 
     // Time multiplier and crash multiplier from the road events
     private fun evTime(a: Int, b: Int): Double =
-        (if (storm) 1.1 else 1.0) * (if (isSchool(a, b)) 1.5 else 1.0) * (if (isRush(a, b)) 1.4 else 1.0)
+        (if (storm) 1.1 else 1.0) * (if (snow) 1.15 else 1.0) * (if (isSchool(a, b)) 1.5 else 1.0) * (if (isRush(a, b)) 1.4 else 1.0)
 
     private fun evRisk(a: Int, b: Int): Double =
-        if (isSchool(a, b)) 0.0 else (if (storm) 1.3 else 1.0) * (if (isRush(a, b)) 1.5 else 1.0)
+        if (isSchool(a, b)) 0.0 else (if (storm) 1.3 else 1.0) * (if (snow) 1.35 else 1.0) * (if (isRush(a, b)) 1.5 else 1.0)
 
     // Blocks that share a side with block i
     private fun nbrBlocks(i: Int): IntArray {
