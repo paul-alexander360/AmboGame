@@ -109,6 +109,8 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
                 GradeRow("Patient exam", rs.nExam, rs.gExam)
                 Line()
                 GradeRow("Drive to hospital", rs.nHosp, rs.gHosp)
+                Line()
+                GradeRow("Handoff report", rs.nHand, rs.gHand)
             }
             // Metal clamp across the top
             Box(

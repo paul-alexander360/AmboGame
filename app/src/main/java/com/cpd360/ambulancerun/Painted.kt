@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -84,6 +85,9 @@ const val HAT_GLASSES = 2
 const val BG_DISPATCH = 0
 const val BG_OFFICE = 1
 const val BG_BAY = 2
+const val BG_ER = 3
+// No background props, for a bust drawn into a scene of its own
+const val BG_NONE = 4
 
 class Look(
     val hs: Int,
@@ -113,6 +117,12 @@ fun dotLook() = Look(
 fun rayLook() = Look(
     HS_BALD, PaintSkin[4], PaintHair[4], tone(0xFF6C9AD0, 0xFF3A5F8A), FIT_COAT, HAT_GLASSES,
     brow = Color(0xFFD8D5D0), must = PaintHair[4], age = 66
+)
+
+// Nurse Kim, who takes your handoff report in the ER
+fun nurseLook() = Look(
+    HS_PONY, PaintSkin[3], PaintHair[2], tone(0xFF4A7AD0, 0xFF24448A), FIT_SCRUBS,
+    eyes = Color(0xFF2A1C14), age = 38
 )
 
 fun uniformTone(i: Int): Tone {
@@ -462,7 +472,17 @@ private fun DrawScope.props(bg: Int) {
             drawRoundRect(Color(0xFF8A96A8), Offset(190f, 30f), Size(56f, 74f), CornerRadius(6f), style = Stroke(2f))
             for ((y, w) in listOf(50f to 36f, 62f to 28f, 74f to 32f, 86f to 20f)) drawLine(Color(0xFF9AA6B8), Offset(200f, y), Offset(200f + w, y), 3f)
         }
-        else -> {
+        BG_ER -> {
+            // ER hallway: a red ER sign with a white cross and a chart on the wall
+            drawRect(Color(0xFFE8EEF6), Offset.Zero, Size(BW, 26f), alpha = 0.12f)
+            glowAt(42f, 70f, 40f, 0xFFFF3030, 0.3f)
+            drawRoundRect(Color(0xFFD33A36), Offset(14f, 50f), Size(56f, 40f), CornerRadius(6f))
+            drawRect(Color.White, Offset(37f, 58f), Size(10f, 24f))
+            drawRect(Color.White, Offset(30f, 65f), Size(24f, 10f))
+            drawRoundRect(Color(0xFFDFE6EE), Offset(190f, 30f), Size(60f, 80f), CornerRadius(8f))
+            for ((y, w) in listOf(48f to 40f, 60f to 30f, 72f to 36f)) drawLine(Color(0xFF9AA6B8), Offset(200f, y), Offset(200f + w, y), 3f)
+        }
+        BG_BAY -> {
             drawRect(Color(0xFF1A2030), Offset.Zero, Size(BW, 120f))
             drawRect(Color(0xFFFFD23A), Offset(0f, 118f), Size(BW, 6f), alpha = 0.5f)
             drawRoundRect(Color(0xFFE8E8EC), Offset(170f, 36f), Size(90f, 70f), CornerRadius(10f))
@@ -477,6 +497,7 @@ private fun DrawScope.props(bg: Int) {
 private fun bgCols(bg: Int): List<Color> = when (bg) {
     BG_DISPATCH -> listOf(Color(0xFF22324A), Color(0xFF121A28))
     BG_OFFICE -> listOf(Color(0xFF3A3240), Color(0xFF1E1A22))
+    BG_ER -> listOf(Color(0xFF2B3446), Color(0xFF161B26))
     else -> listOf(Color(0xFF262C3C), Color(0xFF12151E))
 }
 
@@ -711,4 +732,107 @@ fun DrawScope.paintedPatient(pl: PatientLook) {
         ),
         140f, Offset(300f, 150f), blendMode = BlendMode.Screen
     )
+}
+
+// ---------- the back of the ambulance ----------
+
+private fun poly(vararg v: Float): Path {
+    val p = Path()
+    p.moveTo(v[0], v[1])
+    var i = 2
+    while (i + 1 < v.size) {
+        p.lineTo(v[i], v[i + 1])
+        i += 2
+    }
+    p.close()
+    return p
+}
+
+// Inside the ambulance, looking forward toward the cab: white cabinets, a blue bench, ceiling lights,
+// yellow grab rails, and the patient sitting up on the stretcher. Drawn in a 316 x 230 box.
+// sick = true tints the room red from the light bar and swaps the monitor line to red.
+fun DrawScope.ambulanceBack(pl: PatientLook, expr: Int, sick: Boolean) {
+    val w = 316f
+    val h = 230f
+    val vx = w / 2f
+    val top = h * 0.30f
+    val bot = h * 0.66f
+    val l = w * 0.26f
+    val r = w * 0.74f
+    val bh = bot - top
+    val blue = Brush.verticalGradient(listOf(Color(0xFF6D82B4), Color(0xFF3D4F80)))
+    val drawer = Color(0xFFF4F6F8)
+    val seam = Color(0xFFC4CAD2)
+    // Ceiling, side walls, floor and the back wall
+    drawPath(poly(0f, 0f, w, 0f, r, top, l, top), Brush.verticalGradient(listOf(Color(0xFFF4F6F8), Color(0xFFD9DEE4)), 0f, top))
+    drawPath(poly(0f, 0f, l, top, l, bot, 0f, h), Brush.horizontalGradient(listOf(Color(0xFFCFD5DC), Color(0xFFEEF1F4)), 0f, l))
+    drawPath(poly(w, 0f, r, top, r, bot, w, h), Brush.horizontalGradient(listOf(Color(0xFFE8ECF0), Color(0xFFC4CBD3)), r, w))
+    drawPath(poly(0f, h, l, bot, r, bot, w, h), Brush.verticalGradient(listOf(Color(0xFF4A4F58), Color(0xFF23262C)), bot, h))
+    drawRect(Color(0xFFEEF1F4), Offset(l, top), Size(r - l, bh))
+    drawRect(blue, Offset(l, top), Size(r - l, bh * 0.12f))
+    // Vent panel and the round air vents
+    drawRoundRect(Color(0xFFFAFBFC), Offset(l + (r - l) * 0.30f, top + bh * 0.17f), Size((r - l) * 0.42f, bh * 0.16f), CornerRadius(3f))
+    for (i in 0..8) {
+        val x = l + (r - l) * (0.33f + i * 0.04f)
+        drawLine(Color(0xFFA9B1BA), Offset(x, top + bh * 0.2f), Offset(x, top + bh * 0.3f), 1.5f)
+    }
+    for (i in 0..4) drawCircle(Color(0xFF2A2E35), (r - l) * 0.025f, Offset(l + (r - l) * (0.38f + i * 0.08f), top + bh * 0.42f))
+    // Window through to the cab, with a glimpse of the street at night
+    val wx = l + (r - l) * 0.66f
+    val wy = top + bh * 0.5f
+    drawRoundRect(Color(0xFF141A26), Offset(wx, wy), Size((r - l) * 0.26f, bh * 0.46f), CornerRadius(3f))
+    drawRoundRect(Color(0xFF9AA3AD), Offset(wx, wy), Size((r - l) * 0.26f, bh * 0.46f), CornerRadius(3f), style = Stroke(2f))
+    drawCircle(Color(0xFFFFD27A), 3.5f, Offset(wx + (r - l) * 0.08f, wy + bh * 0.16f), alpha = 0.7f)
+    drawCircle(Color(0xFFFF6060), 3f, Offset(wx + (r - l) * 0.18f, wy + bh * 0.2f), alpha = 0.7f)
+    // Clock
+    drawCircle(Color.White, (r - l) * 0.05f, Offset(l + (r - l) * 0.14f, top + bh * 0.28f))
+    drawCircle(Color(0xFFB9C0C8), (r - l) * 0.05f, Offset(l + (r - l) * 0.14f, top + bh * 0.28f), style = Stroke(1.5f))
+    // Ceiling lights with a warm glow, and the two yellow grab rails
+    for ((x, y) in listOf(0.28f to 0.06f, 0.72f to 0.06f, 0.36f to 0.17f, 0.64f to 0.17f)) {
+        soft(Color(0xFFFFFBE8), 0.5f, w * x, h * y, w * 0.08f, h * 0.035f, 6f)
+        drawOval(Color.White, Offset(w * x - w * 0.055f, h * y - h * 0.017f), Size(w * 0.11f, h * 0.034f))
+        drawOval(Color(0xFFC9CFD6), Offset(w * x - w * 0.055f, h * y - h * 0.017f), Size(w * 0.11f, h * 0.034f), style = Stroke(1f))
+    }
+    drawLine(Color(0xFFE8B830), Offset(w * 0.42f, 0f), Offset(vx - 6f, top), 5f, StrokeCap.Round)
+    drawLine(Color(0xFFE8B830), Offset(w * 0.58f, 0f), Offset(vx + 6f, top), 5f, StrokeCap.Round)
+    // Left wall: blue upper cabinet, the heart monitor and white drawers
+    drawPath(poly(w * 0.06f, h * 0.12f, l, top + 4f, l, top + bh * 0.35f, w * 0.06f, h * 0.34f), blue)
+    drawPath(poly(0f, h * 0.5f, l, top + bh * 0.7f, l, bot, 0f, h), SolidColor(drawer))
+    for (i in 0..2) {
+        val y1 = h * (0.56f + i * 0.14f)
+        val y2 = top + bh * (0.74f + i * 0.09f)
+        drawLine(seam, Offset(0f, y1), Offset(l, y2), 2f)
+        drawLine(Color(0xFF2A2E35), Offset(w * 0.1f, y1 + h * 0.04f), Offset(w * 0.1f, y1 + h * 0.09f), 3f, StrokeCap.Round)
+    }
+    drawPath(poly(w * 0.13f, h * 0.38f, w * 0.21f, h * 0.4f, w * 0.21f, h * 0.5f, w * 0.13f, h * 0.5f), SolidColor(Color(0xFF1A2232)))
+    line(pth {
+        m(w * 0.14f, h * 0.46f); l(w * 0.155f, h * 0.44f); l(w * 0.167f, h * 0.452f); l(w * 0.182f, h * 0.422f); l(w * 0.2f, h * 0.44f)
+    }, if (sick) Color(0xFFFF5A5A) else Color(0xFF46E07A), 2f)
+    // Right wall: cabinet with a screen up top, the blue bench seat below
+    drawPath(poly(w, h * 0.1f, r, top + 6f, r, top + bh * 0.4f, w, h * 0.32f), SolidColor(drawer))
+    drawPath(poly(w * 0.84f, h * 0.17f, w * 0.92f, h * 0.14f, w * 0.92f, h * 0.25f, w * 0.84f, h * 0.26f), SolidColor(Color(0xFF1A2232)))
+    drawPath(poly(w, h * 0.5f, r, top + bh * 0.62f, r, bot, w, h * 0.92f), blue)
+    drawPath(poly(w, h * 0.46f, r, top + bh * 0.58f, r, top + bh * 0.66f, w, h * 0.56f), SolidColor(Color(0xFF8A9CC8)))
+    // Captain's chair at the head of the stretcher
+    drawRoundRect(blue, Offset(vx - w * 0.08f, top + bh * 0.38f), Size(w * 0.16f, bh * 0.62f), CornerRadius(w * 0.04f))
+    // The patient, sitting up
+    val bw = w * 0.74f
+    val sc = bw / BW
+    val o = pl.look
+    val pt = Look(
+        o.hs, o.skin, o.hair, PatientShirts[pl.shirt.coerceIn(0, PatientShirts.size - 1)], FIT_NONE, o.hat, expr, o.eyes,
+        o.brow, o.must, o.beard, o.age, o.pale || sick, o.flush, sick, o.bandage, o.lip
+    )
+    translate(vx - 132f * sc, h * 0.06f) { scale(sc, Offset.Zero) { bust(pt, BG_NONE, true) } }
+    // Stretcher: blanket, chest straps, buckle and the yellow frame
+    soft(Color.Black, 0.35f, vx, h * 0.97f, w * 0.3f, h * 0.04f, 4f)
+    drawPath(pth {
+        m(vx - w * 0.24f, h * 0.9f); q(vx, h * 0.86f, vx + w * 0.24f, h * 0.9f); l(vx + w * 0.3f, h); l(vx - w * 0.3f, h); z()
+    }, Brush.verticalGradient(listOf(Color.White, Color(0xFFCFD6DE)), h * 0.86f, h))
+    val strap = Color(0xFF1E2026)
+    line(pth { m(vx - w * 0.13f, h * 0.66f); l(vx - w * 0.09f, h * 0.9f); m(vx + w * 0.13f, h * 0.66f); l(vx + w * 0.09f, h * 0.9f) }, strap, w * 0.022f, 0.85f)
+    line(pth { m(vx - w * 0.3f, h * 0.8f); q(vx, h * 0.76f, vx + w * 0.3f, h * 0.8f) }, strap, h * 0.025f)
+    drawRoundRect(Color(0xFF9AA3AD), Offset(vx - w * 0.035f, h * 0.765f), Size(w * 0.07f, h * 0.04f), CornerRadius(3f))
+    drawRoundRect(Color(0xFFF2C21A), Offset(vx - w * 0.31f, h * 0.95f), Size(w * 0.62f, h * 0.05f), CornerRadius(5f))
+    if (sick) drawRect(Color(0xFFFF2020), Offset.Zero, Size(w, h), alpha = 0.08f)
 }

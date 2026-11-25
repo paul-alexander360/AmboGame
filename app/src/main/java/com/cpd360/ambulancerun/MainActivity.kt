@@ -176,7 +176,11 @@ fun HomeScreen(version: String, player: PlayerData) {
                 toHospital = rs.stage == 1,
                 destKey = rs.destKey(),
                 crash = rs.accSeg >= 0,
-                sirenOn = player.sirenSound
+                sirenOn = player.sirenSound,
+                chat = if (rs.stage == 1 && rs.accSeg < 0) rs.chat else emptyList(),
+                patient = rs.patient,
+                worse = rs.stage == 1 && rs.handoff && rs.worse >= 0 && !rs.worseAck,
+                back = { close -> BackCare(rs, true, onDone = close) }
             ) {
                 rs.driveShown = true
                 screen = 0
@@ -264,8 +268,9 @@ fun HomeScreen(version: String, player: PlayerData) {
                 }
             }
         }
-        // Bottom: only shows once a route is finished.
-        if (rs.done && !rs.checking) {
+        // Bottom: only shows once a route is finished. After a good drive to the hospital
+        // the handoff (and a patient who got worse, if the drive scene was skipped) comes first.
+        if (rs.done && !rs.checking && !rs.handoff) {
             val user = rs.userTime(rs.path.toList())
             val rt = rating(user, fast)
             val names = listOf("Green", "Yellow", "Orange", "Red")
@@ -336,6 +341,9 @@ fun HomeScreen(version: String, player: PlayerData) {
                     7 -> screen = 8
                 }
             }
+        }
+        if (rs.handoff && rs.driveShown) {
+            if (rs.worse >= 0 && !rs.worseAck) BackCare(rs, false) { } else Handoff(rs)
         }
         if (rs.runOver && rs.driveShown && rs.gTo >= 0) {
             GradeCard(rs, { rs.nextRun() }, { screen = 6 }) { screen = 8 }

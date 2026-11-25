@@ -55,9 +55,9 @@ class Patient(val level: Int, rnd: Random) {
     val tested = mutableStateListOf(false, false, false, false, false, false)
     val treated = mutableStateListOf(false, false, false, false, false)
 
-    private val startOx: Int
-    private val startGlu: Int
-    private val startHr: Int
+    val startOx: Int
+    val startGlu: Int
+    val startHr: Int
     private val r = rnd
 
     init {
