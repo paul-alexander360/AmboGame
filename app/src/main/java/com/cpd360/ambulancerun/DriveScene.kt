@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -1379,6 +1380,10 @@ fun DriveScene(
     destKey: Int,
     crash: Boolean,
     sirenOn: Boolean,
+    chat: List<ChatLine> = emptyList(),
+    patient: Patient? = null,
+    worse: Boolean = false,
+    back: (@Composable (onClose: () -> Unit) -> Unit)? = null,
     onDone: () -> Unit
 ) {
     val plan = remember(city, nodes, start, end) { DrivePlan(city, nodes, start, end) }
@@ -1412,12 +1417,28 @@ fun DriveScene(
         if (sirenOn) siren.start()
         onDispose { siren.stop() }
     }
+    // On the way to the hospital: chat lines pop up from the back. When the patient gets worse,
+    // "I don't feel good..." shows halfway, then the drive pauses while you treat in the back.
+    val hasBack = worse && back != null && patient != null
+    val chatEnd = if (hasBack) 0.4f else 0.85f
+    val warnAt = plan.total * 0.5f
+    val pauseAt = minOf(warnAt + 1.8f, plan.total + 0.5f)
+    var paused by remember { mutableStateOf(false) }
+    var backOpen by remember { mutableStateOf(false) }
+    var backDone by remember { mutableStateOf(false) }
     LaunchedEffect(plan) {
         var first = -1L
+        var last = 0L
         while (true) {
             withFrameNanos { now ->
                 if (first < 0L) first = now
+                if (paused) first += now - last
+                last = now
                 t = (now - first) / 1_000_000_000f
+            }
+            if (hasBack && !backDone && !backOpen && t >= pauseAt) {
+                paused = true
+                backOpen = true
             }
             if (t > plan.total + 1f) {
                 finish()
@@ -1430,6 +1451,13 @@ fun DriveScene(
     val blocks = plan.pts.size - 1
     val blockNo by remember(plan) { derivedStateOf { min(plan.camAt(plan.distAt(t)).seg + 1, blocks) } }
     val arrived by remember(plan) { derivedStateOf { t > plan.total } }
+    val chatShown by remember(plan) {
+        derivedStateOf {
+            val f = (t / plan.total - 0.05f) / (chatEnd - 0.05f)
+            if (chat.isEmpty() || f < 0f) 0 else (1 + (f * chat.size).toInt()).coerceAtMost(chat.size)
+        }
+    }
+    val warn by remember(plan) { derivedStateOf { hasBack && !backDone && t >= warnAt } }
     Box(Modifier.fillMaxSize().background(Color(0xFF1D2027))) {
         Canvas(Modifier.fillMaxSize()) {
             drawWorld(city, plan, t, destKey, crashAt, traffic, labels)
@@ -1449,7 +1477,16 @@ fun DriveScene(
             )
             Text("Block " + blockNo + " of " + blocks, color = Color.White, fontSize = 13.sp)
         }
-        Box(
+        if (patient != null && (chatShown > 0 || warn) && !arrived) {
+            ChatBubbles(
+                chat.take(chatShown), patient, warn,
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .safeDrawingPadding()
+                    .padding(start = 10.dp, end = 10.dp, top = 118.dp)
+            )
+        }
+        if (!backOpen) Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .safeDrawingPadding()
@@ -1471,6 +1508,13 @@ fun DriveScene(
                     if (crash) "Accident!" else "Arrived",
                     color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold
                 )
+            }
+        }
+        if (backOpen && back != null) {
+            back {
+                backOpen = false
+                backDone = true
+                paused = false
             }
         }
     }

@@ -66,6 +66,22 @@ class RouteState(val player: PlayerData) {
     var nTo by mutableStateOf("")
     var nExam by mutableStateOf("")
     var nHosp by mutableStateOf("")
+    // Ride to the hospital (Ride.kt): the chat in the back, a patient who may get worse on the way,
+    // and the handoff report at the hospital
+    var chat by mutableStateOf<List<ChatLine>>(emptyList())
+    // The treatment that fixes the patient when they get worse on the way, or -1 when they stay stable
+    var worse by mutableIntStateOf(-1)
+    var worseStarted by mutableStateOf(false)
+    var worseDone by mutableStateOf(false)
+    var worseOk by mutableStateOf(false)
+    // True once the player has seen how the treatment in the back went
+    var worseAck by mutableStateOf(false)
+    val worseWas = IntArray(5)
+    // True after a good drive to the hospital, until the handoff report is given
+    var handoff by mutableStateOf(false)
+    var gHand by mutableIntStateOf(-1)
+    var nHand by mutableStateOf("")
+    var handBonus by mutableIntStateOf(0)
     private var awarded = false
     // True once a leg was driven with the Siren boost. The boost is used up when the next run starts.
     private var boostUsed = false
@@ -236,6 +252,16 @@ class RouteState(val player: PlayerData) {
         nTo = ""
         nExam = ""
         nHosp = ""
+        chat = emptyList()
+        worse = -1
+        worseStarted = false
+        worseDone = false
+        worseOk = false
+        worseAck = false
+        handoff = false
+        gHand = -1
+        nHand = ""
+        handBonus = 0
     }
 
     fun passed(): Boolean = gTo != 3 && gExam != 3 && gHosp != 3
@@ -345,6 +371,9 @@ class RouteState(val player: PlayerData) {
     }
 
     fun startHospital() {
+        val rnd = Random(patientSeed xor 0x5EED)
+        chat = rideChat(patient, rnd)
+        worse = pickWorse(patient, player, rnd)
         stage = 1
         path.clear()
         fastPath.clear()
@@ -359,13 +388,13 @@ class RouteState(val player: PlayerData) {
     private fun award() {
         if (awarded) return
         awarded = true
-        val c = xpFor(gTo) + xpFor(gExam) + xpFor(gHosp)
+        val c = xpFor(gTo) + xpFor(gExam) + xpFor(gHosp) + handBonus
         earned = c
         val lvBefore = player.rank
         player.credits += c
         player.totalXp += c
         var h = (player.rank - lvBefore) * HEARTS_PER_LEVEL
-        if (gTo == 0 && gExam == 0 && gHosp == 0) h += HEARTS_STRAIGHT_A
+        if (gTo == 0 && gExam == 0 && gHosp == 0 && gHand <= 0) h += HEARTS_STRAIGHT_A
         heartsEarned = h
         player.hearts += h
         if (passed() && player.goodRuns < RUNS_PER_CITY) {
@@ -424,10 +453,56 @@ class RouteState(val player: PlayerData) {
             award()
             return
         }
-        if (stage == 1) {
-            runOver = true
-            award()
+        // A good drive to the hospital: the handoff report comes next, then the grade card
+        if (stage == 1) handoff = true
+    }
+
+    // The patient gets worse in the back: their numbers change, and "was" keeps the old ones
+    fun startWorse() {
+        if (worseStarted || worse < 0) return
+        worseStarted = true
+        val p = patient
+        worseWas[0] = p.hr
+        worseWas[1] = p.ox
+        worseWas[2] = p.sys
+        worseWas[3] = p.dia
+        worseWas[4] = p.glu
+        makeWorse(p, worse, Random(patientSeed xor 0x0BAD))
+    }
+
+    // ok = the right treatment in time. The numbers come back; otherwise the Patient grade drops one step.
+    fun finishWorse(ok: Boolean) {
+        if (worseDone) return
+        worseDone = true
+        worseOk = ok
+        val p = patient
+        if (ok) {
+            p.hr = worseWas[0]
+            p.ox = worseWas[1]
+            p.sys = worseWas[2]
+            p.dia = worseWas[3]
+            p.glu = worseWas[4]
+            nExam = nExam + ", treated in the back"
+        } else {
+            if (gExam in 0..1) gExam++
+            nExam = nExam + ", not treated in the back"
         }
+        version++
+    }
+
+    // right = how many of the 3 important findings were picked
+    fun finishHandoff(right: Int) {
+        if (!handoff) return
+        handoff = false
+        gHand = when (right) {
+            3 -> 0
+            2 -> 1
+            else -> 2
+        }
+        nHand = "$right of 3 findings right"
+        handBonus = right * HANDOFF_BONUS
+        runOver = true
+        award()
     }
 
     private fun arrive(n: Int) {

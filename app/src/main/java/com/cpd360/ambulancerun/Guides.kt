@@ -389,7 +389,7 @@ fun DotTip(key: String, rs: RouteState, onDone: () -> Unit) {
         )
         "grade" -> GuideCard(
             false, "Here's how you did!",
-            "You get a grade for each part: **drive to the call**, **patient exam** and **drive to the hospital**. " +
+            "You get a grade for each part: **drive to the call**, **patient exam**, **drive to the hospital** and your **handoff report**. " +
                 "A run with no F counts toward the 5 you need to clear the city.",
             "Got it", onButton = onDone
         )
