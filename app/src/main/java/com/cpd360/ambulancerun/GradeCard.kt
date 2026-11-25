@@ -31,6 +31,11 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,14 +44,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-private val CardTan = Color(0xFFD9B98A)
-private val CardEdge = Color(0xFFA8875A)
-private val CardInk = Color(0xFF4A3218)
-private val CardSoft = Color(0xFF7A5A32)
+private val CardInk = Color(0xFF2A2622)
+private val CardSoft = Color(0xFF6D6457)
 private val Marker = Color(0xFFC4161C)
 private val PassGreen = Color(0xFF2E9E2A)
 
-// Run grade card: a tan card tilted 30 degrees counter-clockwise with
+// Run grade card: a paper grade sheet on a wooden clipboard, tilted a little, with
 // hand-written grades. A PASS or FAIL stamp lands on it after 5 seconds.
 @Composable
 // A failed run also offers a Hearts retry next to Next run. With too few Hearts the button opens the Hearts shop.
@@ -61,34 +64,68 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0x8C14141F))
+            .background(Color(0x8C06080E))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .rotate(-30f)
-                .width(240.dp)
-                .shadow(14.dp, RoundedCornerShape(10.dp))
-                .background(CardTan, RoundedCornerShape(10.dp))
-                .border(3.dp, CardEdge, RoundedCornerShape(10.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .padding(bottom = 120.dp)
+                .rotate(-3f)
+                .width(300.dp)
+                .shadow(24.dp, RoundedCornerShape(22.dp))
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF6B4A2C), Color(0xFF3E2914))),
+                    RoundedCornerShape(22.dp)
+                )
+                .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(22.dp))
+                .padding(start = 14.dp, end = 14.dp, top = 34.dp, bottom = 14.dp)
         ) {
-            Text(
-                "Ambulance Run", color = Color(0xFF5A3C1A), fontSize = 26.sp, fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "RUN GRADE", color = CardSoft, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            Line()
-            GradeRow("Drive to call", rs.nTo, rs.gTo)
-            Line()
-            GradeRow("Patient exam", rs.nExam, rs.gExam)
-            Line()
-            GradeRow("Drive to hospital", rs.nHosp, rs.gHosp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(4.dp, RoundedCornerShape(6.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFFF6F2E8), Color(0xFFEBE4D4))), RoundedCornerShape(6.dp))
+                    .drawBehind {
+                        // Ruled lines, like a real form
+                        val step = 28.dp.toPx()
+                        var y = step
+                        while (y < size.height) {
+                            drawLine(Color(0x2E5078B4), Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+                            y += step
+                        }
+                    }
+                    .padding(start = 18.dp, end = 18.dp, top = 30.dp, bottom = 14.dp)
+            ) {
+                Text("Ambulance Run", color = CardInk, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "RUN GRADE · CITY " + (rs.idx + 1), color = Color(0xFF7A6E5E), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                GradeRow("Drive to call", rs.nTo, rs.gTo)
+                Line()
+                GradeRow("Patient exam", rs.nExam, rs.gExam)
+                Line()
+                GradeRow("Drive to hospital", rs.nHosp, rs.gHosp)
+            }
+            // Metal clamp across the top
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-28).dp)
+                    .size(120.dp, 50.dp)
+                    .shadow(6.dp, RoundedCornerShape(12.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFFE4E7EC), Color(0xFF8D939C))), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Box(
+                    Modifier
+                        .padding(top = 10.dp)
+                        .size(32.dp, 14.dp)
+                        .background(Color(0xFF5C626B), RoundedCornerShape(7.dp))
+                )
+            }
         }
         if (stamp) {
             val col = if (pass) PassGreen else Marker
@@ -120,7 +157,7 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
                         val enough = rs.player.hearts >= RETRY_COST
                         Row(
                             modifier = Modifier
-                                .background(HeartRed, RoundedCornerShape(16.dp))
+                                .background(HeartRed, RoundedCornerShape(25.dp))
                                 .clickable { if (enough) rs.retry() else onShop() }
                                 .padding(horizontal = 18.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -129,15 +166,7 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
                             if (enough) HeartAmount(RETRY_COST, Color.White, 18, 17, Color.White)
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0xFF4DC43B), RoundedCornerShape(16.dp))
-                            .border(2.dp, Color(0xFFF6A12B), RoundedCornerShape(16.dp))
-                            .clickable { onNext() }
-                            .padding(horizontal = 26.dp, vertical = 12.dp)
-                    ) {
-                        Text("Next run", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    }
+                    GreenButton("Next run") { onNext() }
                 }
             }
         }
@@ -149,8 +178,8 @@ private fun Line() {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(2.dp)
-            .background(Color(0x40785528))
+            .height(1.dp)
+            .background(Color(0x2E000000))
     )
 }
 
@@ -163,7 +192,7 @@ private fun GradeRow(label: String, note: String, grade: Int) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(label, color = CardInk, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            Text(label, color = CardInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(
                 if (note == "") " " else note, color = CardSoft, fontSize = 11.sp,
                 maxLines = 2, overflow = TextOverflow.Ellipsis
@@ -207,6 +236,7 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Glass, RoundedCornerShape(18.dp))
+            .border(1.dp, CardLine, RoundedCornerShape(18.dp))
             .padding(14.dp)
     ) {
         Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
