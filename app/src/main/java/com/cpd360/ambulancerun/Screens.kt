@@ -14,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +44,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextStyle
@@ -50,20 +54,46 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Dispatch look. Colors are taken from the city map: the road lavender (deepened for panels),
-// the route red, the park green and the call-glow yellow.
-val Glass = Color(0xEB3B3F6E)
-val GlassSolid = Color(0xFF3B3F6E)
-val GlassLine = Color(0x26FFFFFF)
-val GlassMute = Color(0xFFC3C6EE)
+// Look 3, night shift: dark frosted glass over a night city, light text, green go buttons
+// and a warm gold for anything picked.
+val Glass = Color(0xE0161A22)
+val GlassSolid = Color(0xFF1C2029)
+val GlassLine = Color(0x1FFFFFFF)
+val GlassMute = Color(0xFF9AA3B5)
 val RouteRed = Color(0xFFE53935)
-val ParkGreen = Color(0xFF8FCB59)
-val CallYellow = Color(0xFFFFE66B)
-val PageBg = Color(0xFFEEEFFA)
-val InkText = Color(0xFF2B2F4A)
-val MuteText = Color(0xFF7378A0)
-val CardLine = Color(0xFFE1E3F3)
-val SoftFill = Color(0xFFEDEEFA)
+val ParkGreen = Color(0xFF2FBF5F)
+val CallYellow = Color(0xFFFFD27A)
+val PageBg = Color(0xFF111419)
+val InkText = Color(0xFFE6EAF2)
+val MuteText = Color(0xFF9AA3B5)
+val CardLine = Color(0x1FFFFFFF)
+val SoftFill = Color(0x14FFFFFF)
+val CardFill = Color(0x0FFFFFFF)
+val DarkInk = Color(0xFF2B2F4A)
+val Gold = Color(0xFFFFD27A)
+val GoGreen = Brush.verticalGradient(listOf(Color(0xFF2FBF5F), Color(0xFF1B8A3F)))
+val PageGlow = Brush.radialGradient(listOf(Color(0xFF2B3346), Color(0xFF111419)), center = Offset(540f, 0f), radius = 1400f)
+
+// A frosted panel: a faint top-to-bottom sheen and a thin light edge
+fun Modifier.glassCard(r: Int = 16): Modifier = this
+    .background(Brush.verticalGradient(listOf(Color(0x17FFFFFF), Color(0x08FFFFFF))), RoundedCornerShape(r.dp))
+    .border(1.dp, CardLine, RoundedCornerShape(r.dp))
+
+// The big green button used across the game
+@Composable
+fun GreenButton(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(25.dp))
+            .background(if (enabled) GoGreen else Brush.verticalGradient(listOf(SoftFill, SoftFill)))
+            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(25.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 24.dp, vertical = 13.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (enabled) Color.White else MuteText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+    }
+}
 
 @Composable
 fun Coin(sizeDp: Int) {
@@ -80,7 +110,7 @@ fun ScreenHeader(title: String, credits: Int, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(GlassSolid, RoundedCornerShape(18.dp))
+            .glassCard(18)
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -117,8 +147,7 @@ fun WhiteCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(16.dp))
-            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
+            .glassCard(16)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content
@@ -139,39 +168,47 @@ fun Swatch(c: Color, selected: Boolean, locked: Boolean = false, lockLabel: Stri
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .border(if (selected) 2.5.dp else 0.dp, if (selected) InkText else Color.Transparent, CircleShape)
+                .border(if (selected) 2.5.dp else 0.dp, if (selected) Gold else Color.Transparent, CircleShape)
                 .padding(4.dp)
                 .clip(CircleShape)
-                .background(if (locked) SoftFill else c)
+                .background(if (locked) Brush.verticalGradient(listOf(SoftFill, SoftFill)) else ball(c))
                 .border(1.dp, CardLine, CircleShape)
                 .clickable(enabled = !locked) { onClick() },
             contentAlignment = Alignment.Center
         ) {
             if (locked) Text("🔒", fontSize = 13.sp)
-            else if (selected) Text("✓", color = if (c.red + c.green + c.blue > 2.2f) InkText else Color.White, fontWeight = FontWeight.Bold)
+            else if (selected) Text("✓", color = if (c.red + c.green + c.blue > 2.2f) DarkInk else Color.White, fontWeight = FontWeight.Bold)
         }
         if (lockLabel != "") Text(lockLabel, fontSize = 9.sp, color = MuteText, textAlign = TextAlign.Center)
     }
 }
 
+// A swatch looks like a little ball: lit at the top left, darker at the bottom
+fun ball(c: Color): Brush = Brush.radialGradient(
+    listOf(lerp(c, Color.White, 0.25f), c, lerp(c, Color.Black, 0.35f)),
+    center = Offset(30f, 26f), radius = 90f
+)
+
 @Composable
 fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) GlassSolid else SoftFill)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) Color(0x1FFFBE46) else SoftFill)
+            .border(1.dp, if (selected) Gold else CardLine, RoundedCornerShape(10.dp))
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
     ) {
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selected) Color.White else InkText)
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (selected) Gold else Color(0xFFCFD5E2))
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LabeledRow(label: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, fontSize = 12.sp, color = MuteText, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) { content() }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
 }
 
@@ -183,18 +220,18 @@ fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(16.dp))
-            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
+            .glassCard(16)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(SoftFill, RoundedCornerShape(12.dp)),
+                .background(SoftFill, RoundedCornerShape(12.dp))
+                .border(1.dp, CardLine, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(glyph, fontSize = if (glyph.length > 2) 13.sp else 20.sp, color = GlassSolid, fontWeight = FontWeight.Bold)
+            Text(glyph, fontSize = if (glyph.length > 2) 13.sp else 20.sp, color = InkText, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -220,7 +257,7 @@ fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: 
         if (maxed) {
             Box(
                 modifier = Modifier
-                    .background(Color(0xFF6FAE3E), RoundedCornerShape(12.dp))
+                    .background(GoGreen, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Text("MAX", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -229,7 +266,7 @@ fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: 
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (canBuy) GlassSolid else SoftFill)
+                    .background(if (canBuy) GoGreen else Brush.verticalGradient(listOf(SoftFill, SoftFill)))
                     .clickable(enabled = canBuy) { onBuy() }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -249,6 +286,7 @@ private fun Page(title: String, player: PlayerData, onBack: () -> Unit, content:
         modifier = Modifier
             .fillMaxSize()
             .background(PageBg)
+            .background(PageGlow)
             .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -263,37 +301,29 @@ private fun Page(title: String, player: PlayerData, onBack: () -> Unit, content:
 @Composable
 fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
     Page("Character", player, onBack) {
+        // Big painted portrait that updates as you pick
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(18.dp))
-                .border(1.dp, CardLine, RoundedCornerShape(18.dp))
-                .padding(8.dp)
+                .height(230.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .border(1.dp, CardLine, RoundedCornerShape(24.dp))
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Brush.verticalGradient(listOf(Color(0xFFF3F4FC), Color(0xFFDCDFF5))))
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+            val look = playerLook(player)
+            Canvas(Modifier.fillMaxSize()) { bustFramed(look, BG_BAY, FRAME_HERO) }
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(10.dp)
+                    .background(Glass, RoundedCornerShape(14.dp))
+                    .border(1.dp, CardLine, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Canvas(Modifier.width(120.dp).aspectRatio(170f / 330f)) {
-                    scale(size.width / 170f, Offset.Zero) {
-                        paramedic(player.female, player.skin, player.hairStyle, player.hairColor, player.uniform)
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(player.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = InkText)
-                    Text("Paramedic, " + player.org, fontSize = 12.sp, color = MuteText)
-                    Box(
-                        Modifier.background(RouteRed, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 3.dp)
-                    ) {
-                        Text("Level " + player.level, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Text("Driver rating " + "%.2f".format(player.drive), fontSize = 12.sp, color = MuteText)
-                }
+                Text(player.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = InkText)
+                Text(
+                    "Paramedic · Level " + player.level + " · Rating " + "%.2f".format(player.drive),
+                    fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold
+                )
             }
         }
         SectionTitle("Look")
@@ -304,10 +334,11 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                     onValueChange = { player.name = it.take(16); player.save() },
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
+                    cursorBrush = SolidColor(Gold),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF2F3FB), RoundedCornerShape(10.dp))
-                        .border(2.dp, Color(0xFFC9CCEA), RoundedCornerShape(10.dp))
+                        .background(SoftFill, RoundedCornerShape(10.dp))
+                        .border(1.dp, CardLine, RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                 )
             }
@@ -316,13 +347,13 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                 Choice("Female", player.female) { player.female = true; player.save() }
             }
             LabeledRow("Skin") {
-                for (i in 0..2) Swatch(SkinLight[i], player.skin == i) { player.skin = i; player.save() }
+                for (i in PaintSkin.indices) Swatch(PaintSkin[i].base, player.skin == i) { player.skin = i; player.save() }
             }
-            LabeledRow("Hair style") {
-                for (i in 0..2) Choice("Style " + (i + 1), player.hairStyle == i) { player.hairStyle = i; player.save() }
+            LabeledRow("Hair") {
+                for (i in HairStyleNames.indices) Choice(HairStyleNames[i], player.hairStyle == i) { player.hairStyle = i; player.save() }
             }
             LabeledRow("Hair color") {
-                for (i in 0..3) Swatch(HairCols[i], player.hairColor == i) { player.hairColor = i; player.save() }
+                for (i in PaintHairNames.indices) Swatch(PaintHair[i].base, player.hairColor == i) { player.hairColor = i; player.save() }
             }
             LabeledRow("Uniform") {
                 for (i in UniformCols.indices) Swatch(UniformCols[i], player.uniform == i) { player.uniform = i; player.save() }
@@ -361,8 +392,7 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White, RoundedCornerShape(18.dp))
-                .border(1.dp, CardLine, RoundedCornerShape(18.dp))
+                .glassCard(18)
                 .padding(8.dp)
         ) {
             Canvas(
@@ -373,11 +403,14 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
             ) {
                 val w = size.width
                 val h = size.height
-                drawRect(Brush.verticalGradient(listOf(Color(0xFF7FD0FF), Color(0xFF2A8FE0)), endY = h * 0.72f), size = Size(w, h * 0.72f))
-                drawRect(Color(0xFF9BD468), Offset(0f, h * 0.72f), Size(w, h * 0.28f))
-                drawRect(Color(0xFF7FB851), Offset(0f, h * 0.72f), Size(w, h * 0.025f))
-                drawCircle(Color.White, h * 0.08f, Offset(w * 0.15f, h * 0.2f), alpha = 0.8f)
-                drawCircle(Color.White, h * 0.1f, Offset(w * 0.22f, h * 0.18f), alpha = 0.8f)
+                drawRect(Brush.verticalGradient(listOf(Color(0xFF0B1424), Color(0xFF1D2A44)), endY = h * 0.72f), size = Size(w, h * 0.72f))
+                for (i in 0..29) drawCircle(Color.White, if (i % 3 == 0) 2.2f else 1.3f, Offset(w * ((i * 53) % 318) / 318f, h * 0.4f * ((i * 29) % 50) / 50f), alpha = 0.7f)
+                drawCircle(Color(0xFFF2EBD8), h * 0.07f, Offset(w * 0.82f, h * 0.18f))
+                drawRect(Brush.verticalGradient(listOf(Color(0xFF3A3D42), Color(0xFF26282C)), startY = h * 0.72f, endY = h), Offset(0f, h * 0.72f), Size(w, h * 0.28f))
+                drawRect(Color(0xFF8C8A84), Offset(0f, h * 0.72f), Size(w, h * 0.025f))
+                for (i in 0..5) drawRect(Color(0xFFE8E2C8), Offset(w * (0.04f + i * 0.17f), h * 0.9f), Size(w * 0.08f, h * 0.012f), alpha = 0.7f)
+                drawCircle(Color(0xFFFF3030), h * 0.5f, Offset(w * 0.2f, h * 0.6f), alpha = 0.10f)
+                drawCircle(Color(0xFF3A6BFF), h * 0.5f, Offset(w * 0.8f, h * 0.6f), alpha = 0.10f)
                 val s = w * 0.86f / 1780f
                 translate(w * 0.07f, h * 0.74f - 875f * s) {
                     scale(s, Offset.Zero) { ambulanceSide(player.ambColor, flash < 0.5f) }
@@ -438,7 +471,10 @@ private fun SettingRow(title: String, desc: String, on: Boolean, onChange: (Bool
         }
         Switch(
             checked = on, onCheckedChange = onChange,
-            colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF6FAE3E), checkedThumbColor = Color.White)
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Color(0xFF2FBF5F), checkedThumbColor = Color.White,
+                uncheckedTrackColor = SoftFill, uncheckedThumbColor = MuteText, uncheckedBorderColor = CardLine
+            )
         )
     }
 }
@@ -464,7 +500,7 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (player.tipsSeen.isEmpty()) SoftFill else GlassSolid)
+                    .background(if (player.tipsSeen.isEmpty()) Brush.verticalGradient(listOf(SoftFill, SoftFill)) else GoGreen)
                     .clickable(enabled = player.tipsSeen.isNotEmpty()) { player.replayTips() }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
@@ -491,8 +527,8 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (state == 2) Color(0x99FFFFFF) else Color.White, RoundedCornerShape(16.dp))
-            .border(if (state == 1) 2.dp else 1.dp, if (state == 1) RouteRed else CardLine, RoundedCornerShape(16.dp))
+            .background(if (state == 2) Color(0x08FFFFFF) else Color(0x12FFFFFF), RoundedCornerShape(16.dp))
+            .border(if (state == 1) 2.dp else 1.dp, if (state == 1) Gold else CardLine, RoundedCornerShape(16.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -517,7 +553,7 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
         when (state) {
             0 -> Box(
                 modifier = Modifier
-                    .background(Color(0xFF6FAE3E), RoundedCornerShape(12.dp))
+                    .background(GoGreen, RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text("LEARNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -525,7 +561,7 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
             else -> Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (canBuy) GlassSolid else SoftFill)
+                    .background(if (canBuy) GoGreen else Brush.verticalGradient(listOf(SoftFill, SoftFill)))
                     .clickable(enabled = canBuy) { onBuy() }
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -578,7 +614,7 @@ fun SpeedCard(player: PlayerData) {
     val d = player.speedVsTarget(lvl)
     val pct = Math.round(kotlin.math.abs(d) * 100.0).toInt()
     val label = if (pct == 0) "On target" else if (d > 0) "$pct% slower than target" else "$pct% faster than target"
-    val col = if (pct == 0 || d < 0) Color(0xFF3F8F1F) else if (d < 0.1) Color(0xFFD9822B) else RouteRed
+    val col = if (pct == 0 || d < 0) Color(0xFF7CF29A) else if (d < 0.1) Color(0xFFFFB74D) else Color(0xFFFF6B6B)
     // The bar fills to the target line at 60% when you match it
     val fill = (0.6f / (1f + d.toFloat())).coerceIn(0.05f, 1f)
     WhiteCard {
