@@ -28,7 +28,7 @@ class Patient(val level: Int, rnd: Random) {
     val kind: Int
     val female: Boolean = rnd.nextBoolean()
     val age: Int = 35 + rnd.nextInt(61)
-    val skin: Int = rnd.nextInt(3)
+    val skin: Int = rnd.nextInt(5)
     val hairStyle: Int = rnd.nextInt(3)
     val hairColor: Int = rnd.nextInt(4)
     val shirt: Int = rnd.nextInt(5)
