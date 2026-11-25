@@ -511,9 +511,10 @@ private fun DrawScope.outfit(o: Look, c: Float, sy: Float, sw: Float) {
 }
 
 // A bust in a 265 x 250 box: background, props, body, head and a vignette.
-fun DrawScope.bust(o: Look, bg: Int) {
+// wide = true leaves out the box's own background and vignette, for a picture wider than the box
+fun DrawScope.bust(o: Look, bg: Int, wide: Boolean = false) {
     val bgc = bgCols(bg)
-    drawRect(Brush.verticalGradient(bgc, startY = 0f, endY = BH), Offset.Zero, Size(BW, BH))
+    if (!wide) drawRect(Brush.verticalGradient(bgc, startY = 0f, endY = BH), Offset.Zero, Size(BW, BH))
     props(bg)
     val cx = 132f
     val hy = 98f
@@ -532,7 +533,7 @@ fun DrawScope.bust(o: Look, bg: Int) {
     part(body, o.top, 8f, hl(cx - 50f, sy, 30f, 10f), 0.12f)
     outfit(o, cx, sy, sw)
     paintedHead(o, cx, hy, rx, 1.2f, 7f)
-    drawRect(
+    if (!wide) drawRect(
         Brush.radialGradient(
             0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.5f),
             center = Offset(BW * 0.5f, BH * 0.42f), radius = BW * 0.75f
@@ -553,9 +554,17 @@ fun DrawScope.bustFramed(o: Look, bg: Int, frame: Int) {
     drawRect(Brush.verticalGradient(bgc))
     when (frame) {
         FRAME_SHEET -> {
-            // Head and shoulders across a wide, short strip
-            val sc = maxOf(w * 1.08f / BW, h / 160f)
-            translate(w / 2f - 132f * sc, -10f * sc) { scale(sc, Offset.Zero) { bust(o, bg) } }
+            // Head and shoulders across a wide, short strip, sized like the approved mockup:
+            // the whole head from the hair bun to the headset mic fits, with the shoulders below.
+            val sc = minOf(w * 0.93f / BW, h / 150f)
+            translate(w / 2f - 132f * sc, -8f * sc) { scale(sc, Offset.Zero) { bust(o, bg, true) } }
+            // One vignette over the whole strip, so there are no seams at the sides
+            drawRect(
+                Brush.radialGradient(
+                    0.55f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.45f),
+                    center = Offset(w * 0.5f, h * 0.45f), radius = maxOf(w, h) * 0.7f
+                )
+            )
         }
         FRAME_AVATAR -> {
             val sc = w / 127f

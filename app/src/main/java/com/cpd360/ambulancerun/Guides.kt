@@ -232,23 +232,21 @@ fun DrawScope.doctorIcon() {
     clipPath(c) { bustFramed(rayLook(), BG_OFFICE, FRAME_AVATAR) }
 }
 
-// Dot or Dr. Ray, painted, with what they say as a headline across the bottom of the picture
+// Dot or Dr. Ray, painted, with what they say as a headline just under the picture.
+// The headline sits below the picture, not on it, so it never covers their face.
 @Composable
 fun GuideScene(dr: Boolean, bubble: String, modifier: Modifier) {
     val look = remember(dr) { if (dr) rayLook() else dotLook() }
-    // Clip so the painted person stays inside the picture and never covers the text below
-    Box(modifier.clipToBounds()) {
-        Canvas(Modifier.fillMaxSize()) { bustFramed(look, if (dr) BG_OFFICE else BG_DISPATCH, FRAME_SHEET) }
+    Column(Modifier.fillMaxWidth()) {
+        // Clip so the painted person stays inside the picture and never covers the text below
+        Box(modifier.clipToBounds()) {
+            Canvas(Modifier.fillMaxSize()) { bustFramed(look, if (dr) BG_OFFICE else BG_DISPATCH, FRAME_SHEET) }
+        }
         if (bubble != "") {
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B0E14))))
-                    .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 10.dp)
-            ) {
-                Text(bubble, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, lineHeight = 19.sp)
-            }
+            Text(
+                bubble, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, lineHeight = 21.sp,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            )
         }
     }
 }
