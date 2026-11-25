@@ -137,7 +137,7 @@ fun HomeScreen(version: String, player: PlayerData) {
             // Back does nothing during the exam, so the run isn't lost. Tap To hospital! to leave.
             BackHandler { }
             Box(Modifier.fillMaxSize()) {
-                ExamScreen(rs.patient, rs.level) {
+                ExamScreen(rs.patient, rs.level, player) {
                     rs.examDone()
                     screen = 0
                 }
@@ -150,6 +150,8 @@ fun HomeScreen(version: String, player: PlayerData) {
         2 -> {
             AmbulanceScreen(player) {
                 rs.applyPlayer()
+                // Buying the last Compartment step here can finish the next level's list
+                rs.moveUpIfIdle()
                 screen = 0
             }
             return
@@ -190,8 +192,9 @@ fun HomeScreen(version: String, player: PlayerData) {
             return
         }
         6 -> {
-            DrScreen(player, rs.level, rs.kitNeeded(), {
-                if (rs.buyKit()) screen = 0
+            DrScreen(player, rs.level, {
+                // The last thing bought for the next level moves you up right away if no run has started
+                if (rs.moveUpIfIdle()) screen = 0
             }) { screen = 0 }
             return
         }
@@ -239,7 +242,7 @@ fun HomeScreen(version: String, player: PlayerData) {
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             TopBar(
-                rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared(),
+                rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared() && !rs.canMoveUp(),
                 canDispatch(rs), callWaiting(rs, guide), { guide.showCall = true }
             ) { menu = true }
             Spacer(Modifier.height(8.dp))
@@ -528,7 +531,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             Column(Modifier.weight(1f)) {
                 Text(player.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(player.orgLine, color = CallYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("Level " + player.level, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Rank " + player.rank, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Box(
                     Modifier
@@ -592,7 +595,7 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             c.addOval(androidx.compose.ui.geometry.Rect(Offset.Zero, size))
             clipPath(c) { bustFramed(me, BG_BAY, FRAME_AVATAR) }
         }) { onPick(1) }
-        DrawerItem(DR_NAME, "Learn tests and treatments", { doctorIcon() }) { onPick(5) }
+        DrawerItem(DR_NAME, "Buy tests and treatments", { doctorIcon() }) { onPick(5) }
         DrawerItem("Settings", "Sound and drive scenes", {
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.width * 0.28f

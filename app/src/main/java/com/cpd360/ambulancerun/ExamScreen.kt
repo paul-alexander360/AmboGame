@@ -49,8 +49,9 @@ import androidx.compose.ui.unit.sp
 private val Good = Color(0xFF7CF29A)
 private val Locked = Color(0xFF5D6576)
 
+// Tests and treatments are unlocked by buying them from Dr. Ray
 @Composable
-fun ExamScreen(p: Patient, level: Int, onDone: () -> Unit) {
+fun ExamScreen(p: Patient, level: Int, player: PlayerData, onDone: () -> Unit) {
     val done = p.tested.count { it }
     Column(
         modifier = Modifier
@@ -116,13 +117,13 @@ fun ExamScreen(p: Patient, level: Int, onDone: () -> Unit) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val v = level >= testLevels[0]
+            val v = player.hasTest(0)
             ResultTile(
                 Modifier.weight(1f), "HR", v, testLevels[0], p.tested[0],
                 p.hr.toString(), if (p.hrNote != "") "bpm, " + p.hrNote else "bpm"
             )
             ResultTile(
-                Modifier.weight(1f), "SpO₂", level >= testLevels[1], testLevels[1], p.tested[1],
+                Modifier.weight(1f), "SpO₂", player.hasTest(1), testLevels[1], p.tested[1],
                 if (p.ox == 0) "None" else p.ox.toString() + "%", if (p.ox == 0) "no reading" else p.oxNote
             )
             ResultTile(
@@ -130,17 +131,17 @@ fun ExamScreen(p: Patient, level: Int, onDone: () -> Unit) {
                 p.sys.toString() + "/" + p.dia, "mmHg"
             )
             ResultTile(
-                Modifier.weight(1f), "Glucose", level >= testLevels[2], testLevels[2], p.tested[2],
+                Modifier.weight(1f), "Glucose", player.hasTest(2), testLevels[2], p.tested[2],
                 listOf("Low", "Normal", "High")[p.glu], p.gluNote
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ResultTile(
-                Modifier.weight(1f), "Stroke", level >= testLevels[3], testLevels[3], p.tested[3],
+                Modifier.weight(1f), "Stroke", player.hasTest(3), testLevels[3], p.tested[3],
                 if (p.stroke) "Positive" else "Negative", ""
             )
             ResultTile(
-                Modifier.weight(1f), "ECG", level >= testLevels[4], testLevels[4], p.tested[4],
+                Modifier.weight(1f), "ECG", player.hasTest(4), testLevels[4], p.tested[4],
                 if (p.heartAttack) "Heart attack" else "Normal", ""
             )
             Spacer(Modifier.weight(2f))
@@ -149,14 +150,14 @@ fun ExamScreen(p: Patient, level: Int, onDone: () -> Unit) {
         val testGlyphs = listOf("♥", "SpO₂", "💧", "🧠", "ECG")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             for (k in 0..4) {
-                Tool(testNames[k], testGlyphs[k], level < testLevels[k], testLevels[k], p.tested[k], false) { p.test(k) }
+                Tool(testNames[k], testGlyphs[k], !player.hasTest(k), testLevels[k], p.tested[k], false) { p.test(k) }
             }
         }
         Label("Treatments")
         val treatGlyphs = listOf("O₂", "G", "✚", "CPR", "⚡")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             for (k in 0..4) {
-                Tool(treatNames[k], treatGlyphs[k], level < treatLevels[k], treatLevels[k], p.treated[k], true) { p.treat(k) }
+                Tool(treatNames[k], treatGlyphs[k], !player.hasTreat(k), treatLevels[k], p.treated[k], true) { p.treat(k) }
             }
         }
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -28,29 +28,57 @@ const val MAX_UP = 5
 
 fun upgradeCost(current: Int): Int = 100 shl current
 
-// Medical kits. Each level has its own kit with the tests and treatments that level unlocks.
-// You buy the next level's kit once City 5 of your level is cleared, and it moves you to City 1 of that level.
+// Levels and what Dr. Ray sells. Each level needs its test, its treatment (if it has one)
+// and one more Patient Compartment step. You buy them during the level before, then clear City 5 to move up.
 const val MAX_LEVEL = 8
 const val RUNS_PER_CITY = 5
 
-fun kitCost(level: Int): Int = 500 * level
+// The Patient Compartment goes up one step per level, so it tops out higher than the other upgrades
+const val COMPARTMENT_MAX = MAX_LEVEL - 1
 
-// Each level's lesson from Dr. Ray: the tests and treatments that level unlocks
-val kitNames = listOf(
-    "Basics", "Vitals", "Pulse ox + Oxygen", "Glucose test + Glucose",
-    "Splint / Stop bleeding", "CPR", "Stroke test", "ECG + Shock"
+fun ambMax(k: Int): Int = if (k == COMPARTMENT) COMPARTMENT_MAX else MAX_UP
+
+// One thing Dr. Ray sells: test k (treat = false) or treatment k. Indexes match testNames and treatNames.
+data class DrItem(val treat: Boolean, val k: Int)
+
+fun itemLevel(d: DrItem): Int = if (d.treat) treatLevels[d.k] else testLevels[d.k]
+
+// The tests and treatments a level needs, tests first
+fun itemsFor(level: Int): List<DrItem> =
+    testLevels.indices.filter { testLevels[it] == level }.map { DrItem(false, it) } +
+        treatLevels.indices.filter { treatLevels[it] == level }.map { DrItem(true, it) }
+
+// A test and its treatment split the level's price 300/200 per level. A lone item costs 500 per level.
+fun itemCost(d: DrItem): Int {
+    val lv = itemLevel(d)
+    return if (itemsFor(lv).size < 2) 500 * lv else if (d.treat) 200 * lv else 300 * lv
+}
+
+// A treatment opens once you own the test from the same level, if there is one
+fun itemNeeds(d: DrItem): DrItem? = if (d.treat) itemsFor(itemLevel(d)).firstOrNull { !it.treat } else null
+
+val shopTestNames = listOf("Vitals", "Pulse ox test", "Glucose test", "Stroke test", "ECG")
+val shopTestDescs = listOf(
+    "Blood pressure and pulse", "Checks oxygen levels", "Checks blood sugar",
+    "Checks for signs of a stroke", "Reads the heart rhythm"
 )
-val kitDescs = listOf(
-    "Talk to the patient, pick the hospital.",
-    "Blood pressure and pulse.",
-    "Check oxygen levels and give oxygen.",
-    "Check blood sugar and give glucose.",
-    "Stop bleeding and splint broken bones.",
-    "Start CPR when the heart stops.",
-    "Check for signs of a stroke.",
-    "Read the heart rhythm and shock it."
+val shopTestGlyphs = listOf("💓", "🫁", "🩸", "🧠", "📈")
+val shopTreatNames = listOf("Oxygen", "Glucose", "Splint / Stop bleeding", "CPR", "Shock")
+val shopTreatDescs = listOf(
+    "Give oxygen when it's low", "Give sugar when it's low", "Stop bleeding and splint broken bones",
+    "Start CPR when the heart stops", "Shock a heart that's too fast or too slow"
 )
-val kitGlyphs = listOf("🩺", "💓", "🫁", "🩸", "🩹", "❤️", "🧠", "⚡")
+val shopTreatGlyphs = listOf("💨", "🍬", "🩹", "❤️", "⚡")
+
+fun itemName(d: DrItem): String = if (d.treat) shopTreatNames[d.k] else shopTestNames[d.k]
+fun itemDesc(d: DrItem): String = if (d.treat) shopTreatDescs[d.k] else shopTestDescs[d.k]
+fun itemGlyph(d: DrItem): String = if (d.treat) shopTreatGlyphs[d.k] else shopTestGlyphs[d.k]
+
+// What the Compartment step for each level makes room for (index = level)
+val compRoom = listOf(
+    "", "", "Room for the vitals kit", "Room for the oxygen tank", "Room for the glucose kit",
+    "Room for splints and bandages", "Room for the CPR gear", "Room for the stroke kit", "Room for the ECG and defibrillator"
+)
 
 class PlayerData(private val ctx: Context) {
     var name by mutableStateOf("Player")
@@ -94,9 +122,13 @@ class PlayerData(private val ctx: Context) {
     // Guide tips already shown by Dot and Dr. Ray
     val tipsSeen = mutableStateListOf<String>()
 
-    // Certification moves up with skills: Unit until Vitals (Level 2), Aid until the Stroke test (Level 7), then Medic
+    // Tests and treatments bought from Dr. Ray. Indexes match testNames and treatNames.
+    val testsOwned = mutableStateListOf(false, false, false, false, false)
+    val treatsOwned = mutableStateListOf(false, false, false, false, false)
+
+    // Certification moves up with skills: Unit until Vitals, Aid until the Stroke test, then Medic
     val cert: String
-        get() = if (cityLevel >= 7) "Medic" else if (cityLevel >= 2) "Aid" else "Unit"
+        get() = if (testsOwned[3]) "Medic" else if (testsOwned[0]) "Aid" else "Unit"
 
     // What Dot calls you, like "Aid 12"
     val callSign: String get() = cert + " " + (if (unit == "") "1" else unit)
@@ -124,17 +156,18 @@ class PlayerData(private val ctx: Context) {
     val ambAvoid: Double
         get() = 0.005 * ambUp[TIRES] + 0.01 * (ambUp[BRAKES] + ambUp[LIGHTS] + ambUp[SIREN] + ambUp[CAB])
 
-    val level: Int get() = 1 + totalXp / 500
+    // Rank goes up every 500 XP. Level always means the city level.
+    val rank: Int get() = 1 + totalXp / 500
     val drive: Double
-        get() = 0.1 - 0.005 * (level - 1) - 0.02 * charUp[SKILL_DRIVE] -
+        get() = 0.1 - 0.005 * (rank - 1) - 0.02 * charUp[SKILL_DRIVE] -
             0.015 * (ambUp[TIRES] + ambUp[ENGINE] + ambUp[CAB])
     // Your speed against the standard medic of a level, on a typical road.
     // Above 0 means slower than the target, below 0 faster. 0.06 = 6% slower.
     fun speedVsTarget(lvl: Int): Double = (1.5 + drive) / (1.5 + Levels.driver[lvl - 1]) - 1.0
 
     val crossK: Double get() = 1.0 - 0.06 * (ambUp[LIGHTS] + ambUp[SIREN])
-    val avoidance: Double get() = 0.01 * (level - 1)
-    val dodge: Double get() = minOf(0.9, 0.05 + 0.01 * (level - 1))
+    val avoidance: Double get() = 0.01 * (rank - 1)
+    val dodge: Double get() = minOf(0.9, 0.05 + 0.01 * (rank - 1))
     val heavyBonus: Double get() = 0.1 * heavy
 
     // Crash risk multiplier from skills and upgrades. Never below 30% of the base.
@@ -170,11 +203,41 @@ class PlayerData(private val ctx: Context) {
 
     fun buyAmb(k: Int): Boolean {
         val lv = ambUp[k]
-        if (lv >= MAX_UP || credits < upgradeCost(lv)) return false
+        if (lv >= ambMax(k) || credits < upgradeCost(lv)) return false
         credits -= upgradeCost(lv)
         ambUp[k] = lv + 1
         save()
         return true
+    }
+
+    fun hasTest(k: Int): Boolean = testsOwned[k]
+    fun hasTreat(k: Int): Boolean = treatsOwned[k]
+    fun owns(d: DrItem): Boolean = if (d.treat) treatsOwned[d.k] else testsOwned[d.k]
+
+    // The Compartment step a level needs
+    fun compFor(level: Int): Int = level - 1
+
+    // Only the next level's items can be bought, and a treatment needs its test first
+    fun itemOpen(d: DrItem): Boolean {
+        val need = itemNeeds(d)
+        return !owns(d) && itemLevel(d) == cityLevel + 1 && (need == null || owns(need))
+    }
+
+    fun buyItem(d: DrItem): Boolean {
+        if (!itemOpen(d) || credits < itemCost(d)) return false
+        credits -= itemCost(d)
+        if (d.treat) treatsOwned[d.k] = true else testsOwned[d.k] = true
+        save()
+        return true
+    }
+
+    // Everything a level needs is bought: its tests, treatments and Compartment step
+    fun readyFor(level: Int): Boolean = itemsFor(level).all { owns(it) } && ambUp[COMPARTMENT] >= compFor(level)
+
+    // Gives every test and treatment up to this level. Used for old saves and the test tools.
+    fun grantUpTo(level: Int) {
+        for (k in testLevels.indices) if (testLevels[k] <= level) testsOwned[k] = true
+        for (k in treatLevels.indices) if (treatLevels[k] <= level) treatsOwned[k] = true
     }
 
     fun save() {
@@ -195,6 +258,8 @@ class PlayerData(private val ctx: Context) {
             o.put("cityLevel", cityLevel)
             o.put("cityIdx", cityIdx)
             o.put("goodRuns", goodRuns)
+            o.put("testsOwned", JSONArray(testsOwned.toList()))
+            o.put("treatsOwned", JSONArray(treatsOwned.toList()))
             o.put("female", female)
             o.put("skin", skin)
             o.put("hairStyle", hairStyle)
@@ -227,10 +292,17 @@ class PlayerData(private val ctx: Context) {
         }
     }
 
-    private fun readList(o: JSONObject, key: String, into: MutableList<Int>) {
+    private fun readList(o: JSONObject, key: String, into: MutableList<Int>, max: (Int) -> Int) {
         val a = o.optJSONArray(key) ?: return
         for (i in into.indices) {
-            if (i < a.length()) into[i] = a.optInt(i, 0).coerceIn(0, MAX_UP)
+            if (i < a.length()) into[i] = a.optInt(i, 0).coerceIn(0, max(i))
+        }
+    }
+
+    private fun readFlags(o: JSONObject, key: String, into: MutableList<Boolean>) {
+        val a = o.optJSONArray(key) ?: return
+        for (i in into.indices) {
+            if (i < a.length()) into[i] = a.optBoolean(i, false)
         }
     }
 
@@ -258,6 +330,11 @@ class PlayerData(private val ctx: Context) {
             cityLevel = o.optInt("cityLevel", 1).coerceIn(1, MAX_LEVEL)
             cityIdx = o.optInt("cityIdx", 0).coerceIn(0, 4)
             goodRuns = o.optInt("goodRuns", 0).coerceIn(0, RUNS_PER_CITY)
+            // Saves from before items were sold one at a time own everything up to their level
+            if (o.has("testsOwned")) {
+                readFlags(o, "testsOwned", testsOwned)
+                readFlags(o, "treatsOwned", treatsOwned)
+            } else grantUpTo(cityLevel)
             female = o.optBoolean("female", false)
             // Saves from before the painted look had 3 skins and 3 hair styles. Map them across once.
             val newLook = o.optBoolean("look2", false)
@@ -272,8 +349,8 @@ class PlayerData(private val ctx: Context) {
             if (!ownsPaint(ambColor)) ambColor = 0
             sirenSound = o.optBoolean("sirenSound", true)
             driveScenes = o.optBoolean("driveScenes", true)
-            readList(o, "charUp", charUp)
-            readList(o, "ambUp", ambUp)
+            readList(o, "charUp", charUp) { MAX_UP }
+            readList(o, "ambUp", ambUp) { ambMax(it) }
             val ts = o.optJSONArray("tipsSeen")
             if (ts != null) for (i in 0 until ts.length()) tipsSeen.add(ts.optString(i))
             if (!o.has("charUp")) {

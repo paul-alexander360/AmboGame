@@ -223,7 +223,7 @@ fun HeartsShopScreen(player: PlayerData, onBack: () -> Unit, onAmbulance: () -> 
             }
         }
         ShopNote(
-            "Earn free Hearts: +$HEARTS_STRAIGHT_A for a run with straight A's, +$HEARTS_PER_LEVEL each character level."
+            "Earn free Hearts: +$HEARTS_STRAIGHT_A for a run with straight A's, +$HEARTS_PER_LEVEL each new Rank."
         )
         Spacer(Modifier.height(16.dp))
     }

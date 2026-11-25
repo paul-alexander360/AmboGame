@@ -215,8 +215,11 @@ fun LabeledRow(label: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: Int, extra: String = "", onBuy: () -> Unit) {
-    val maxed = level >= MAX_UP
+fun UpgradeCard(
+    glyph: String, name: String, desc: String, level: Int, credits: Int, extra: String = "", max: Int = MAX_UP,
+    onBuy: () -> Unit
+) {
+    val maxed = level >= max
     val cost = upgradeCost(level)
     val canBuy = !maxed && credits >= cost
     Row(
@@ -239,13 +242,13 @@ fun UpgradeCard(glyph: String, name: String, desc: String, level: Int, credits: 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText, modifier = Modifier.weight(1f))
-                Text("Lv $level/$MAX_UP", fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold)
+                Text("Lv $level/$max", fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold)
             }
             Text(desc, fontSize = 11.sp, color = MuteText)
             if (extra != "") Text(extra, fontSize = 11.sp, color = RouteRed, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                for (i in 0 until MAX_UP) {
+                for (i in 0 until max) {
                     Box(
                         Modifier
                             .weight(1f)
@@ -324,7 +327,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                 Text(player.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = InkText)
                 Text(player.orgLine, fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold)
                 Text(
-                    "Level " + player.level + " · Rating " + "%.2f".format(player.drive),
+                    "Rank " + player.rank + " · Rating " + "%.2f".format(player.drive),
                     fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold
                 )
             }
@@ -417,7 +420,7 @@ private val ambParts = listOf(
     Triple("☀", "Lights", "Crash risk down 4% per level and quicker through intersections."),
     Triple("🔊", "Siren", "Crash risk down 4% per level and quicker through intersections."),
     Triple("🚚", "Cab", "Faster speed. About 1% faster per level."),
-    Triple("✚", "Patient compartment", "Needed to move up levels. Unlocks more tests, treatments and paint colors.")
+    Triple("✚", "Patient compartment", "Each new level needs one more step, to carry its gear. Also unlocks paint colors.")
 )
 
 @Composable
@@ -492,8 +495,10 @@ fun AmbulanceScreen(player: PlayerData, onBack: () -> Unit) {
         SectionTitle("Upgrades")
         for (k in ambParts.indices) {
             val (g, n, d) = ambParts[k]
-            val extra = if (k == COMPARTMENT) "Next player level needs Lv " + minOf(MAX_UP, player.level) else ""
-            UpgradeCard(g, n, d, player.ambUp[k], player.credits, extra) { player.buyAmb(k) }
+            val nextLv = player.cityLevel + 1
+            val extra = if (k == COMPARTMENT && nextLv <= MAX_LEVEL && player.ambUp[k] < player.compFor(nextLv))
+                "Level $nextLv needs Lv " + player.compFor(nextLv) else ""
+            UpgradeCard(g, n, d, player.ambUp[k], player.credits, extra, ambMax(k)) { player.buyAmb(k) }
         }
     }
 }
@@ -550,21 +555,20 @@ fun SettingsScreen(player: PlayerData, version: String, onBack: () -> Unit) {
         }
         WhiteCard {
             Text("Player", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = InkText)
-            Text("Level " + player.level + "   XP " + player.totalXp + "   Credits " + "%,d".format(player.credits), fontSize = 13.sp, color = MuteText)
+            Text("Rank " + player.rank + "   XP " + player.totalXp + "   Credits " + "%,d".format(player.credits), fontSize = 13.sp, color = MuteText)
         }
         Text("Version $version", color = MuteText, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
 
-// One lesson on Dr. Ray's page. state: 0 learned, 1 next (buyable when canBuy), 2 later
+// One item on Dr. Ray's page. state: 0 owned, 1 for sale (buyable when canBuy), 2 locked
 @Composable
-private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: () -> Unit) {
-    val i = lv - 1
+private fun DrCard(glyph: String, name: String, desc: String, state: Int, cost: Int, canBuy: Boolean, note: String, onBuy: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (state == 2) Color(0x08FFFFFF) else Color(0x12FFFFFF), RoundedCornerShape(16.dp))
-            .border(if (state == 1) 2.dp else 1.dp, if (state == 1) Gold else CardLine, RoundedCornerShape(16.dp))
+            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -574,27 +578,26 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
                 .background(SoftFill, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Text(kitGlyphs[i], fontSize = 20.sp)
+            Text(glyph, fontSize = 20.sp, color = if (state == 2) MuteText else InkText)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                "Level $lv · " + kitNames[i], fontSize = 15.sp, fontWeight = FontWeight.Bold,
-                color = if (state == 2) MuteText else InkText
-            )
-            Text(kitDescs[i], fontSize = 11.sp, color = MuteText)
-            if (note != "") Text(note, fontSize = 11.sp, color = RouteRed, fontWeight = FontWeight.Bold)
+            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = if (state == 2) MuteText else InkText)
+            Text(desc, fontSize = 11.sp, color = MuteText)
+            if (note != "") Text(note, fontSize = 11.sp, color = Gold, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(10.dp))
-        when (state) {
-            0 -> Box(
+        if (state == 0) {
+            Box(
                 modifier = Modifier
-                    .background(GoGreen, RoundedCornerShape(12.dp))
+                    .background(Color(0x2E2FBF5F), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color(0x802FBF5F), RoundedCornerShape(12.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text("LEARNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("OWNED", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF7CF29A))
             }
-            else -> Row(
+        } else {
+            Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
                     .background(if (canBuy) GoGreen else Brush.verticalGradient(listOf(SoftFill, SoftFill)))
@@ -605,9 +608,11 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
                 if (state == 1) {
                     Coin(14)
                     Spacer(Modifier.width(5.dp))
+                } else {
+                    Text("🔒 ", fontSize = 12.sp)
                 }
                 Text(
-                    "%,d".format(kitCost(lv)), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    "%,d".format(cost), fontSize = 14.sp, fontWeight = FontWeight.Bold,
                     color = if (canBuy) Color.White else MuteText
                 )
             }
@@ -615,29 +620,70 @@ private fun KitCard(lv: Int, state: Int, canBuy: Boolean, note: String, onBuy: (
     }
 }
 
-// Dr. Ray's page: the lessons that teach each level's tests and treatments.
-// level is the level you are on; ready is true once City 5 of that level is cleared.
+// Dr. Ray's page: the tests, treatments and Compartment step the next level needs, then what you've learned.
+// level is the level you are on. onBought runs after each purchase.
 @Composable
-fun DrScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit, onBack: () -> Unit) {
+fun DrScreen(player: PlayerData, level: Int, onBought: () -> Unit, onBack: () -> Unit) {
     Page(DR_NAME, player, onBack) {
+        val next = level + 1
+        val items = if (next <= MAX_LEVEL) itemsFor(next) else emptyList()
+        val compNeed = player.compFor(next)
+        val compHave = player.ambUp[COMPARTMENT]
+        val total = items.size + 1
+        val have = items.count { player.owns(it) } + (if (compHave >= compNeed) 1 else 0)
+        val waiting = items.firstOrNull { !player.owns(it) && player.itemOpen(it) }
         val bubble = if (level >= MAX_LEVEL) "You've learned everything I know. Great work!"
-            else if (!ready) "Clear City 5 and I'll teach you the next skills."
-            else if (player.credits < kitCost(level + 1)) "Ready when you are. Earn a few more credits first."
-            else "You're ready for Level " + (level + 1) + "!"
+            else if (have == total) "You're all set for Level $next. Clear City 5 to move up!"
+            else if (waiting != null && have > 0) itemName(waiting) + " is ready for you now."
+            else "Level $next patients need a more detailed exam. Here's what to get."
         GuideScene(true, bubble, Modifier.fillMaxWidth().height(220.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .background(Color(0x26FFD27A), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color(0x66FFD27A), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text("★ Rank " + player.rank, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(player.orgLine, color = MuteText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        if (next <= MAX_LEVEL) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { SectionTitle("Needed for Level $next") }
+                Text("$have of $total", color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            for (d in items) {
+                val owned = player.owns(d)
+                val open = player.itemOpen(d)
+                val need = itemNeeds(d)
+                val note = if (!owned && !open && need != null) "Opens after " + itemName(need) else ""
+                DrCard(
+                    itemGlyph(d), itemName(d), itemDesc(d), if (owned) 0 else if (open) 1 else 2,
+                    itemCost(d), open && player.credits >= itemCost(d), note
+                ) { if (player.buyItem(d)) onBought() }
+            }
+            val compOk = compHave >= compNeed
+            val compCost = upgradeCost(compHave)
+            DrCard(
+                "🚑", "Compartment Lv $compNeed", compRoom[next], if (compOk) 0 else 1, compCost,
+                !compOk && player.credits >= compCost,
+                if (!compOk && compNeed - compHave > 1) "You're at Lv $compHave. Each step is bought one at a time." else ""
+            ) { if (player.buyAmb(COMPARTMENT)) onBought() }
+        }
         SectionTitle("You've learned")
-        for (lv in 1..level) KitCard(lv, 0, false, "") { }
-        if (level < MAX_LEVEL) {
-            val next = level + 1
-            val cost = kitCost(next)
-            val note = if (!ready) "Clear City 5 of Level $level to unlock."
-                else if (player.credits < cost) "%,d".format(cost - player.credits) + " more credits needed."
-                else "Opens Level $next cities."
-            SectionTitle("Next lesson")
-            KitCard(next, 1, ready && player.credits >= cost, note) { onBuy() }
-            if (next < MAX_LEVEL) {
-                SectionTitle("Later")
-                for (lv in next + 1..MAX_LEVEL) KitCard(lv, 2, false, "") { }
+        DrCard("🩺", "Basics", "Talk to the patient, pick the hospital", 0, 0, false, "") { }
+        for (lv in 2..MAX_LEVEL) for (d in itemsFor(lv)) {
+            if (player.owns(d)) DrCard(itemGlyph(d), itemName(d), itemDesc(d), 0, 0, false, "") { }
+        }
+        if (next < MAX_LEVEL) {
+            SectionTitle("Later")
+            for (lv in next + 1..MAX_LEVEL) {
+                val l = itemsFor(lv)
+                val name = l.joinToString(", then ") { itemName(it) }
+                val cost = l.sumOf { itemCost(it) }
+                DrCard(itemGlyph(l[0]), name, "Opens in Level " + (lv - 1), 2, cost, false, "") { }
             }
         }
     }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -166,7 +167,7 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
                             if (enough) HeartAmount(RETRY_COST, Color.White, 18, 17, Color.White)
                         }
                     }
-                    GreenButton("Next run") { onNext() }
+                    GreenButton(if (rs.canMoveUp()) "Go to Level " + (rs.level + 1) else "Next run") { onNext() }
                 }
             }
         }
@@ -220,7 +221,10 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
     val body: String
     if (rs.kitNeeded()) {
         title = "City 5 cleared!"
-        body = "See $DR_NAME to learn the Level " + (rs.level + 1) + " skills and move on to Level " + (rs.level + 1) + "."
+        body = "To move on to Level " + (rs.level + 1) + " you still need:"
+    } else if (rs.canMoveUp()) {
+        title = "Level " + rs.level + " cleared!"
+        body = "You have everything for Level " + (rs.level + 1) + ". Your next run is there."
     } else if (rs.cityCleared()) {
         title = "Every city cleared!"
         body = "Keep running calls for credits and upgrades."
@@ -269,35 +273,28 @@ fun RunProgress(rs: RouteState, onKit: () -> Unit) {
             }
         }
         if (rs.kitNeeded()) {
-            val cost = rs.nextKitCost()
-            val have = p.credits
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Coin(13)
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    "%,d".format(minOf(have, cost)) + " of " + "%,d".format(cost),
-                    color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)
-                )
-                val left = cost - have
-                Text(
-                    if (left <= 0) "ready to buy" else "about " + ((left + 99) / 100) + " more runs",
-                    color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .background(GlassLine, RoundedCornerShape(4.dp))
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth((have.toFloat() / cost).coerceIn(0f, 1f))
-                        .height(8.dp)
-                        .background(CallYellow, RoundedCornerShape(4.dp))
-                )
+            // A tick for each thing the next level needs, a red cross for what's still missing
+            val next = rs.level + 1
+            val names = itemsFor(next).map { itemName(it) to p.owns(it) } +
+                listOf(("Compartment Lv " + p.compFor(next)) to (p.ambUp[COMPARTMENT] >= p.compFor(next)))
+            for ((n, have) in names) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(20.dp)
+                            .background(if (have) ParkGreen else Color.Transparent, CircleShape)
+                            .border(2.dp, if (have) ParkGreen else Color(0xFFFF6B6B), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (have) "✓" else "✕", color = if (have) Color.White else Color(0xFFFF6B6B),
+                            fontSize = 11.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(n, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
             }
             Spacer(Modifier.height(10.dp))
             Box(
