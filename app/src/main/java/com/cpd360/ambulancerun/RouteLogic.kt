@@ -58,7 +58,7 @@ class RouteState(val player: PlayerData) {
     var runOver by mutableStateOf(false)
     var failReason by mutableStateOf("")
     var earned by mutableIntStateOf(0)
-    // Hearts earned this run: straight A's and character level ups
+    // Hearts earned this run: straight A's and new Ranks
     var heartsEarned by mutableIntStateOf(0)
     var gTo by mutableIntStateOf(-1)
     var gExam by mutableIntStateOf(-1)
@@ -249,19 +249,25 @@ class RouteState(val player: PlayerData) {
     // City 5 is cleared: 5 good runs there
     fun cityCleared(): Boolean = idx == 4 && player.goodRuns >= RUNS_PER_CITY
 
-    // City 5 is cleared and there is a next level kit to buy
-    fun kitNeeded(): Boolean = cityCleared() && level < MAX_LEVEL
+    // City 5 is cleared but something for the next level still needs buying
+    fun kitNeeded(): Boolean = cityCleared() && level < MAX_LEVEL && !player.readyFor(level + 1)
 
-    fun nextKitCost(): Int = kitCost(level + 1)
+    // City 5 is cleared and everything for the next level is bought
+    fun canMoveUp(): Boolean = cityCleared() && level < MAX_LEVEL && player.readyFor(level + 1)
 
-    // Buy the next level's kit and move to City 1 of that level
-    fun buyKit(): Boolean {
-        if (!kitNeeded()) return false
-        val c = nextKitCost()
-        if (player.credits < c) return false
-        player.credits -= c
+    // After the last purchase: move up now if no run has started yet. Otherwise Next run does it.
+    fun moveUpIfIdle(): Boolean {
+        if (!canMoveUp() || stage != 0 || started || done || path.isNotEmpty()) return false
         load(level + 1, 0)
         return true
+    }
+
+    // What the next level still needs, by name
+    fun missingForNext(): List<String> {
+        val next = level + 1
+        val l = itemsFor(next).filter { !player.owns(it) }.map { itemName(it) }.toMutableList()
+        if (player.ambUp[COMPARTMENT] < player.compFor(next)) l.add("Compartment Lv " + player.compFor(next))
+        return l
     }
 
     // Testing button: moves to the next city. In City 5 it fills the runs so the kit can be bought.
@@ -278,8 +284,12 @@ class RouteState(val player: PlayerData) {
     }
 
     // Testing page: go straight to a level and city with some runs already done
+    // It also gives the tests, treatments and Compartment step that level needs.
     fun jumpTo(l: Int, i: Int, runs: Int) {
-        load(l.coerceIn(1, MAX_LEVEL), i.coerceIn(0, 4))
+        val lv = l.coerceIn(1, MAX_LEVEL)
+        player.grantUpTo(lv)
+        if (player.ambUp[COMPARTMENT] < player.compFor(lv)) player.ambUp[COMPARTMENT] = player.compFor(lv)
+        load(lv, i.coerceIn(0, 4))
         player.goodRuns = runs.coerceIn(0, RUNS_PER_CITY)
         player.save()
     }
@@ -301,6 +311,9 @@ class RouteState(val player: PlayerData) {
     fun nextRun() {
         if (player.goodRuns >= RUNS_PER_CITY && idx < 4) {
             load(level, idx + 1)
+        } else if (canMoveUp()) {
+            // City 5 is cleared and everything is bought: on to City 1 of the next level
+            load(level + 1, 0)
         } else {
             city.newCall()
             resetRun()
@@ -348,10 +361,10 @@ class RouteState(val player: PlayerData) {
         awarded = true
         val c = xpFor(gTo) + xpFor(gExam) + xpFor(gHosp)
         earned = c
-        val lvBefore = player.level
+        val lvBefore = player.rank
         player.credits += c
         player.totalXp += c
-        var h = (player.level - lvBefore) * HEARTS_PER_LEVEL
+        var h = (player.rank - lvBefore) * HEARTS_PER_LEVEL
         if (gTo == 0 && gExam == 0 && gHosp == 0) h += HEARTS_STRAIGHT_A
         heartsEarned = h
         player.hearts += h

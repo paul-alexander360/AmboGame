@@ -348,6 +348,8 @@ private val loopSteps = listOf(
 // Dot's tip for the map right now, or "" for none. The call card is handled separately.
 fun mapTip(rs: RouteState, p: PlayerData, guide: GuideState): String {
     if (callWaiting(rs, guide)) {
+        // Dr. Ray's list for the next level, once per level (after the very first run on Level 1)
+        if (rs.level < MAX_LEVEL && p.seen("intro") && !p.seen("start" + rs.level)) return "start" + rs.level
         if (rs.kitNeeded() && !p.seen("dr")) return "dr"
         if ((rs.idx > 0 || rs.level > 1) && !p.seen("city") && p.seen("intro")) return "city"
     }
@@ -362,14 +364,15 @@ fun DotTip(key: String, rs: RouteState, onDone: () -> Unit) {
     when (key) {
         "dr" -> GuideCard(
             false, "City 5 cleared! Nice job.",
-            "To reach Level " + (rs.level + 1) + " you need new skills. Open the menu and see **$DR_NAME**. " +
-                "Lessons cost credits, so keep running calls here until you have enough.",
+            "To reach Level " + (rs.level + 1) + " you still need **" + rs.missingForNext().joinToString(", ") +
+                "**. Open the menu and see **$DR_NAME**. Keep running calls here to earn the credits.",
             "Got it", onButton = onDone
         )
+        "start" + rs.level -> LevelStartCard(rs.player, rs.level, onDone)
         "city" -> GuideCard(
             false, "Welcome to a new city!",
             "Each city has its own streets and hospitals. Get **5 runs with no F** here to open the next city. " +
-                "After City 5, $DR_NAME teaches you the next level.",
+                "After City 5, buy what $DR_NAME lists to reach the next level.",
             "Got it", onButton = onDone
         )
         "hosp" -> GuideCard(
@@ -390,6 +393,69 @@ fun DotTip(key: String, rs: RouteState, onDone: () -> Unit) {
                 "A run with no F counts toward the 5 you need to clear the city.",
             "Got it", onButton = onDone
         )
+    }
+}
+
+// Dr. Ray at the start of a level: what to buy before you can move on to the next one
+@Composable
+private fun LevelStartCard(p: PlayerData, level: Int, onDone: () -> Unit) {
+    val next = level + 1
+    val items = itemsFor(next)
+    val what = if (items.any { it.treat } && items.any { !it.treat }) "a **more detailed exam** and **treatment**"
+        else if (items.any { it.treat }) "**treatment**" else "a **more detailed exam**"
+    GuideCard(
+        true, "Welcome to Level $level!",
+        "Patients in Level $next will need $what. Before you can move on, buy these:",
+        "Got it",
+        extra = {
+            Spacer(Modifier.height(4.dp))
+            for (d in items) {
+                val need = itemNeeds(d)
+                val note = if (need != null && !p.owns(need)) "Opens after " + itemName(need) else itemDesc(d)
+                NeedRow(itemGlyph(d), itemName(d), note, itemCost(d), p.owns(d), need != null && !p.owns(need))
+            }
+            val comp = p.compFor(next)
+            NeedRow("🚑", "Compartment Lv $comp", compRoom[next], upgradeCost(maxOf(0, comp - 1)), p.ambUp[COMPARTMENT] >= comp, false)
+        },
+        onButton = onDone
+    )
+}
+
+@Composable
+private fun NeedRow(glyph: String, name: String, note: String, cost: Int, owned: Boolean, locked: Boolean) {
+    Spacer(Modifier.height(6.dp))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Color(0x0FFFFFFF), RoundedCornerShape(14.dp))
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .background(Color(0x14FFFFFF), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(glyph, fontSize = 17.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(note, color = GlassMute, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        if (owned) {
+            Text("OWNED", color = Color(0xFF7CF29A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (locked) Text("🔒 ", fontSize = 11.sp) else {
+                    Coin(12)
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text("%,d".format(cost), color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -464,7 +530,7 @@ private fun skillTip(level: Int): Pair<String, String> = when (level) {
     2 -> "New skill: Vitals!" to "Tap **Vitals** on every patient who is awake. It checks blood pressure and pulse. Numbers in red mean trouble."
     3 -> "New skill: Oxygen!" to "Trouble breathing? Run **Pulse ox**. Under 93% is low and under 90% is dangerous, so give **Oxygen** before you leave."
     4 -> "New skill: Glucose!" to "Weak or shaky? Run the **Glucose** test. Low sugar, give **Glucose**. High sugar needs the hospital, not glucose."
-    5 -> "New skill: Splints!" to "Bad cut or broken bone? Use **Splint / Stop bleeding** before you go. A sore bump on the head doesn't need it."
+    5 -> "New skill: Trauma exam!" to "Hurt? Run the **Trauma** exam. Bleeding or a broken bone needs **Splint / Stop bleeding** before you go. A sore bump on the head doesn't."
     6 -> "New skill: CPR!" to "Not breathing and no pulse? Start **CPR** right away. It doesn't always work, but without it they have no chance."
     7 -> "New skill: Stroke test!" to "Dizzy or feeling strange? Run the **Stroke** test and **Glucose**. A stroke needs a bigger hospital."
     else -> "New skill: ECG and Shock!" to "Chest pain? Run the **ECG**. If the pulse is under 80 or over 120, a **Shock** brings it back to normal."

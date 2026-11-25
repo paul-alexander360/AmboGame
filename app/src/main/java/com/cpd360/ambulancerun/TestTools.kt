@@ -165,9 +165,9 @@ fun TestToolsScreen(player: PlayerData, rs: RouteState, onBack: () -> Unit) {
             }
         }
 
-        TestCard("CHARACTER LEVEL") {
-            Stepper("Level", player.level, 1, TEST_MAX_CHAR_LEVEL) { setCharLevel(it) }
-            TestNote("Sets XP to the start of that level. Changes right away.")
+        TestCard("RANK") {
+            Stepper("Rank", player.rank, 1, TEST_MAX_CHAR_LEVEL) { setCharLevel(it) }
+            TestNote("Sets XP to the start of that rank. Changes right away.")
         }
 
         TestCard("JUMP TO") {
@@ -189,7 +189,7 @@ fun TestToolsScreen(player: PlayerData, rs: RouteState, onBack: () -> Unit) {
                 rs.jumpTo(jLevel, jCity - 1, jRuns)
                 onBack()
             }
-            TestNote("Level 1–$MAX_LEVEL, City 1–5, Runs 0–$RUNS_PER_CITY. Starts a new call there.")
+            TestNote("Level 1–$MAX_LEVEL, City 1–5, Runs 0–$RUNS_PER_CITY. Starts a new call there and gives you that level's tests, treatments and Compartment.")
         }
 
         TestCard("START OVER") {
