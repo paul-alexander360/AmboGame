@@ -188,6 +188,7 @@ class PlayerData(private val ctx: Context) {
             o.put("hairStyle", hairStyle)
             o.put("hairColor", hairColor)
             o.put("uniform", uniform)
+            o.put("look2", true)
             o.put("ambColor", ambColor)
             o.put("sirenSound", sirenSound)
             o.put("driveScenes", driveScenes)
@@ -237,10 +238,15 @@ class PlayerData(private val ctx: Context) {
             cityIdx = o.optInt("cityIdx", 0).coerceIn(0, 4)
             goodRuns = o.optInt("goodRuns", 0).coerceIn(0, RUNS_PER_CITY)
             female = o.optBoolean("female", false)
-            skin = o.optInt("skin", 0).coerceIn(0, 2)
-            hairStyle = o.optInt("hairStyle", 0).coerceIn(0, 2)
-            hairColor = o.optInt("hairColor", 1).coerceIn(0, 3)
-            uniform = o.optInt("uniform", 0).coerceIn(0, 3)
+            // Saves from before the painted look had 3 skins and 3 hair styles. Map them across once.
+            val newLook = o.optBoolean("look2", false)
+            skin = if (newLook) o.optInt("skin", 0).coerceIn(0, 4) else o.optInt("skin", 0).coerceIn(0, 2) * 2
+            val hs = o.optInt("hairStyle", 0)
+            hairStyle = if (newLook) hs.coerceIn(0, 5)
+                else if (female) intArrayOf(HS_LONG, HS_PONY, HS_BUN)[hs.coerceIn(0, 2)]
+                else intArrayOf(HS_SHORT, HS_BUZZ, HS_CURLY)[hs.coerceIn(0, 2)]
+            hairColor = o.optInt("hairColor", 1).coerceIn(0, 4)
+            uniform = o.optInt("uniform", 0).coerceIn(0, 4)
             ambColor = o.optInt("ambColor", 0).coerceIn(0, AmbColors.size - 1)
             if (!ownsPaint(ambColor)) ambColor = 0
             sirenSound = o.optBoolean("sirenSound", true)
