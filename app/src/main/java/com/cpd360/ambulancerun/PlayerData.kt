@@ -55,7 +55,8 @@ val kitGlyphs = listOf("🩺", "💓", "🫁", "🩸", "🩹", "❤️", "🧠",
 class PlayerData(private val ctx: Context) {
     var name by mutableStateOf("Player")
     var unit = "1"
-    var org = "County EMS"
+    // The organization you respond as, set on the character screen
+    var org by mutableStateOf("County EMS")
     var orgColor = 0xFFE53935.toInt()
     var credits by mutableIntStateOf(0)
     // Premium currency
@@ -202,6 +203,15 @@ class PlayerData(private val ctx: Context) {
                 f.delete()
                 t.renameTo(f)
             }
+        } catch (e: Exception) {
+        }
+    }
+
+    // Test tools: delete the save so the next start is a brand new character
+    fun wipe() {
+        try {
+            File(ctx.filesDir, "player.json").delete()
+            File(ctx.filesDir, "player.tmp").delete()
         } catch (e: Exception) {
         }
     }

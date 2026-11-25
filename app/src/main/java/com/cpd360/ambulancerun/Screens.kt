@@ -320,6 +320,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(player.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = InkText)
+                if (player.org != "") Text(player.org, fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold)
                 Text(
                     "Paramedic · Level " + player.level + " · Rating " + "%.2f".format(player.drive),
                     fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold
@@ -332,6 +333,20 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                 BasicTextField(
                     value = player.name,
                     onValueChange = { player.name = it.take(16); player.save() },
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
+                    cursorBrush = SolidColor(Gold),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SoftFill, RoundedCornerShape(10.dp))
+                        .border(1.dp, CardLine, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                )
+            }
+            LabeledRow("Organization") {
+                BasicTextField(
+                    value = player.org,
+                    onValueChange = { player.org = it.take(24); player.save() },
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
                     cursorBrush = SolidColor(Gold),

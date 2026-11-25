@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,9 +66,19 @@ private val DrSkinD = Color(0xFF9C6440)
 
 // Which call card was answered. Lives above the screen switch so it survives page changes.
 class GuideState {
-    var callFor by mutableIntStateOf(-1)
+    // The call (patient) the player has already answered. A new run brings a new patient, so a new call.
+    var callFor by mutableStateOf<Patient?>(null)
+    // True while the call card is open from the Dispatch Me button
+    var showCall by mutableStateOf(false)
     var introPage by mutableIntStateOf(0)
 }
+
+// A call is waiting: the run hasn't started and the player hasn't answered this call yet
+fun callWaiting(rs: RouteState, guide: GuideState): Boolean =
+    rs.stage == 0 && !rs.done && !rs.started && rs.path.isEmpty() && guide.callFor !== rs.patient
+
+// Dispatch Me can open the call card any time before the drive to the call is finished
+fun canDispatch(rs: RouteState): Boolean = rs.stage == 0 && !rs.done
 
 // ---------- Drawing ----------
 
@@ -338,7 +349,7 @@ private val loopSteps = listOf(
 
 // Dot's tip for the map right now, or "" for none. The call card is handled separately.
 fun mapTip(rs: RouteState, p: PlayerData, guide: GuideState): String {
-    if (rs.stage == 0 && !rs.done && !rs.started && rs.path.isEmpty() && guide.callFor != rs.version) {
+    if (callWaiting(rs, guide)) {
         if (rs.kitNeeded() && !p.seen("dr")) return "dr"
         if ((rs.idx > 0 || rs.level > 1) && !p.seen("city") && p.seen("intro")) return "city"
     }

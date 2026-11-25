@@ -1,5 +1,6 @@
 package com.cpd360.ambulancerun
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,6 +51,8 @@ private val TestField = Color(0xFF0C0E13)
 private val TestBtnFill = Color(0xFF232833)
 private val TestLabel = Color(0xFF7D8699)
 private val TestGo = Color(0xFF2FBF5F)
+private val TestRed = Color(0xFFC62828)
+private val TestRedHot = Color(0xFFFF3B30)
 
 // Testing page: set credits, set the character level, and jump to any level, city and run count.
 @Composable
@@ -59,6 +63,8 @@ fun TestToolsScreen(player: PlayerData, rs: RouteState, onBack: () -> Unit) {
     var jLevel by remember { mutableIntStateOf(rs.level) }
     var jCity by remember { mutableIntStateOf(rs.idx + 1) }
     var jRuns by remember { mutableIntStateOf(player.goodRuns) }
+    var confirmWipe by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? Activity
 
     fun setCredits(v: Int) {
         player.credits = v.coerceAtLeast(0)
@@ -184,6 +190,22 @@ fun TestToolsScreen(player: PlayerData, rs: RouteState, onBack: () -> Unit) {
                 onBack()
             }
             TestNote("Level 1–$MAX_LEVEL, City 1–5, Runs 0–$RUNS_PER_CITY. Starts a new call there.")
+        }
+
+        TestCard("START OVER") {
+            if (!confirmWipe) {
+                TestPill("Reset to a new character", TestRed, Modifier.fillMaxWidth(), 16) { confirmWipe = true }
+                TestNote("Wipes your character, level, XP, credits, Hearts, upgrades, paints and tips, then starts the game like a fresh install.")
+            } else {
+                TestPill("Tap again to wipe everything", TestRedHot, Modifier.fillMaxWidth(), 16) {
+                    // Delete the save and restart the screen, which loads a brand new character
+                    player.wipe()
+                    activity?.recreate()
+                }
+                Spacer(Modifier.height(8.dp))
+                TestPill("Cancel", TestBtnFill, Modifier.fillMaxWidth()) { confirmWipe = false }
+                TestNote("This can't be undone.")
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
