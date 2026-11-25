@@ -159,10 +159,13 @@ fun ExamScreen(p: Patient, level: Int, player: PlayerData, onDone: () -> Unit) {
             }
         }
         Label("Treatments")
-        val treatGlyphs = listOf("O₂", "G", "✚", "CPR", "⚡")
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            for (k in 0..4) {
-                Tool(treatNames[k], treatGlyphs[k], !player.hasTreat(k), treatLevels[k], p.treated[k], true) { p.treat(k) }
+        val treatGlyphs = listOf("O₂", "G", "✚", "CPR", "⚡", "🌬", "Epi", "🧊", "Nar", "❄", "🛡", "🧣")
+        // Two rows of six so all twelve fit
+        for (row in treatNames.indices.chunked(6)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                for (k in row) {
+                    Tool(treatShort(k), treatGlyphs[k], !player.hasTreat(k), treatLevels[k], p.treated[k], true) { p.treat(k) }
+                }
             }
         }
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -270,21 +273,22 @@ fun patientLook(p: Patient): PatientLook {
     val expr = when {
         limp -> EX_CLOSED
         p.helped -> EX_SMILE
-        p.kind == TRAUMA -> EX_PAIN
-        p.kind == DIABETIC || p.kind == NEURO -> EX_WEAK
+        p.kind == TRAUMA || p.kind == BURN -> EX_PAIN
+        p.kind == OVERDOSE || p.kind == SEIZURE -> EX_CLOSED
+        p.kind == DIABETIC || p.kind == NEURO || p.kind == HEAT || p.kind == COLD -> EX_WEAK
         else -> EX_WORRIED
     }
     val hand = when {
         limp || p.helped -> HAND_LAP
-        p.kind == RESP -> HAND_THROAT
+        p.kind == RESP || p.kind == ASTHMA || p.kind == ALLERGY -> HAND_THROAT
         p.kind == CARDIAC -> HAND_CHEST
         else -> HAND_LAP
     }
     val look = Look(
         hs, PaintSkin[p.skin.coerceIn(0, 4)], hair, PaintSkin[0], expr = expr, age = p.age,
-        pale = limp || p.kind == DIABETIC,
-        sweat = !limp && !p.helped && (p.kind == CARDIAC || p.kind == RESP || p.kind == DIABETIC),
-        bandage = p.kind == TRAUMA,
+        pale = limp || p.kind == DIABETIC || p.kind == COLD || p.kind == OVERDOSE,
+        sweat = !limp && !p.helped && (p.kind == CARDIAC || p.kind == RESP || p.kind == DIABETIC || p.kind == HEAT || p.kind == ASTHMA),
+        bandage = p.kind == TRAUMA || (p.kind == BURN && p.helped),
         eyes = if (p.skin >= 3) Color(0xFF2A1C14) else Color(0xFF4A3326)
     )
     return PatientLook(look, p.shirt, p.pants, hand)

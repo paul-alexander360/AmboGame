@@ -117,6 +117,9 @@ fun pickWorse(p: Patient, player: PlayerData, rnd: Random): Int {
     if (player.hasTreat(1) && p.kind == DIABETIC) l.add(1)
     if (player.hasTreat(2) && p.kind == TRAUMA && p.injury > 0) l.add(2)
     if (player.hasTreat(4) && p.kind == CARDIAC) l.add(4)
+    // The new patients get worse in their own way, and need their own treatment again
+    val own = kindTreat[p.kind]
+    if (own != null && player.hasTreat(own)) l.add(own)
     if (l.isEmpty() || rnd.nextInt(100) >= 40) return -1
     return l[rnd.nextInt(l.size)]
 }
@@ -137,6 +140,20 @@ fun makeWorse(p: Patient, k: Int, rnd: Random) {
             p.dia = rr(48, 55)
             p.hr = rr(120, 135)
         }
+        5, 8 -> {
+            // Asthma tightens up again, or the overdose wears back in
+            p.ox = rr(84, 88)
+            p.hr = if (k == 8) rr(48, 56) else (p.hr + rr(8, 15)).coerceAtMost(150)
+        }
+        6, 9 -> {
+            // The allergy comes back, or the heat drops the blood pressure
+            p.sys = rr(80, 90)
+            p.dia = rr(45, 55)
+            p.hr = rr(130, 150)
+        }
+        7 -> p.hr = rr(130, 145)
+        10 -> p.hr = rr(140, 160)
+        11 -> p.hr = rr(44, 52)
         else -> p.hr = rr(160, 180)
     }
 }
@@ -148,6 +165,13 @@ fun worseText(p: Patient, k: Int): String {
         0 -> "$they **oxygen** fell to **" + p.ox + "%**."
         1 -> "$they **blood sugar** dropped. " + (if (p.female) "She's" else "He's") + " shaky and sweaty."
         2 -> "The **bleeding** started again. BP fell to **" + p.sys + "/" + p.dia + "**."
+        5 -> "$they **wheezing** is back. Oxygen fell to **" + p.ox + "%**."
+        6 -> "$they **lips are swelling** again. BP fell to **" + p.sys + "/" + p.dia + "**."
+        7 -> "The **burn** hurts a lot. $they pulse is up to **" + p.hr + "**."
+        8 -> (if (p.female) "She's" else "He's") + " **hard to wake** again. Oxygen fell to **" + p.ox + "%**."
+        9 -> (if (p.female) "She's" else "He's") + " **burning up**. BP fell to **" + p.sys + "/" + p.dia + "**."
+        10 -> (if (p.female) "She's" else "He's") + " having **another seizure**! Pulse **" + p.hr + "**."
+        11 -> (if (p.female) "She's" else "He's") + " **shivering** hard. Pulse is down to **" + p.hr + "**."
         else -> "$they **heart** is racing at **" + p.hr + "**."
     }
 }
@@ -233,14 +257,15 @@ fun BackCare(rs: RouteState, inDrive: Boolean, firstStep: Int = 0, onDone: () ->
     val k = rs.worse
     LaunchedEffect(Unit) { rs.startWorse() }
     var step by remember { mutableIntStateOf(firstStep) }
-    var left by remember { mutableIntStateOf(BACK_SECONDS) }
+    // The time left lives in RouteState so skipping the drive doesn't start the timer over
+    val left = rs.worseLeft
     var picked by remember { mutableIntStateOf(-1) }
     LaunchedEffect(step) {
-        while (step < 2 && left > 0) {
+        while (step < 2 && rs.worseLeft > 0) {
             delay(1000)
-            left--
+            rs.worseLeft--
         }
-        if (step < 2 && left <= 0) {
+        if (step < 2 && rs.worseLeft <= 0) {
             rs.finishWorse(false)
             step = 2
         }
@@ -321,9 +346,15 @@ fun BackCare(rs: RouteState, inDrive: Boolean, firstStep: Int = 0, onDone: () ->
                 "PICK ONE TREATMENT", color = MuteText, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
             )
-            val glyphs = listOf("O₂", "G", "✚", "CPR", "⚡")
+            val glyphs = listOf("O₂", "G", "✚", "CPR", "⚡", "🌬", "Epi", "🧊", "Nar", "❄", "🛡", "🧣")
+            // The right one and up to three others you own, in a mixed order
+            val choices = remember(k) {
+                val r = Random(p.address.hashCode().toLong() + k)
+                val others = treatNames.indices.filter { it != k && rs.player.hasTreat(it) && !(it == 3) }.shuffled(r).take(3)
+                (others + k).shuffled(r)
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                for (t in 0..4) {
+                for (t in choices) {
                     // Only the treatments you've bought can be picked
                     val own = rs.player.hasTreat(t)
                     Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -469,7 +500,7 @@ class Finding(val text: String, val key: Boolean)
 // Three findings that matter for this call and three that don't, shuffled
 fun makeFindings(rs: RouteState, rnd: Random): List<Finding> {
     val p = rs.patient
-    val given = (0..4).filter { p.treated[it] && !(p.kind == ARREST && it == 3) }.map { treatNames[it].substringBefore(" /").lowercase() }
+    val given = treatNames.indices.filter { p.treated[it] && !(p.kind == ARREST && it == 3) }.map { treatNames[it].substringBefore(" /").lowercase() }
     val they = if (p.female) "her" else "his"
     val first = if (p.kind == ARREST) "Found not breathing, CPR brought them back"
         else p.title + ": \"" + p.complaint + "\""
@@ -479,6 +510,13 @@ fun makeFindings(rs: RouteState, rnd: Random): List<Finding> {
         DIABETIC -> "Blood sugar was " + (if (p.startGlu == 0) "low" else "high")
         TRAUMA -> listOf("Bumped head, no injury found", "Bleeding from a cut", "Broken bone")[p.injury.coerceIn(0, 2)]
         NEURO -> if (p.stroke) "Stroke test positive" else "Dizzy, stroke test negative"
+        ASTHMA -> "Wheezing, oxygen was " + p.startOx + "%"
+        ALLERGY -> "Swelling after an allergy, BP was low"
+        BURN -> "Burn on $they arm or hand"
+        OVERDOSE -> "Took too much medicine, oxygen was " + p.startOx + "%"
+        HEAT -> "Very hot and confused"
+        SEIZURE -> "Had a seizure, sleepy after"
+        COLD -> "Very cold, pulse was " + p.startHr
         ARREST -> "Heart started again after CPR"
         else -> "Nothing serious found"
     }
@@ -578,5 +616,99 @@ fun Handoff(rs: RouteState) {
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ---------- crash call: who goes first? ----------
+
+private val crashRoles = listOf("Driver", "Passenger", "Other driver")
+
+// What you see when you walk up to each crash patient
+private fun crashNote(p: Patient): String = when (p.severity) {
+    2 -> "Not answering. Breathing fast. Bleeding from the leg."
+    1 -> "Talking. Wrist bent wrong. Says it hurts a lot."
+    else -> "Walking around. Neck is a bit sore."
+}
+
+@Composable
+fun Triage(rs: RouteState) {
+    var pick by remember { mutableIntStateOf(-1) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+            .background(Brush.verticalGradient(listOf(Color(0xFF1C2029), Color(0xFF12151B))))
+            .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassCard(18)
+                .padding(horizontal = 16.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(rs.patient.address.substringAfter(" ") + " · Crash", color = InkText, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Box(
+                Modifier
+                    .background(Color(0xE6E53935), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text("" + rs.victims.size + " patients", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Column(Modifier.padding(horizontal = 6.dp)) {
+            Who(Color(0xFF3D8BFF), PARTNER.uppercase() + " · YOUR PARTNER")
+            Spacer(Modifier.height(4.dp))
+            Text(
+                highlight("\"We can only take one. Unit 2 takes the " + (if (rs.victims.size == 2) "other" else "others") + ". Who's **sickest**?\""),
+                color = InkText, fontSize = 17.sp, fontWeight = FontWeight.Bold
+            )
+        }
+        rs.victims.forEachIndexed { i, v ->
+            val on = pick == i
+            val look = remember(v) { patientLook(v).look }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(if (on) Color(0x47E53935) else Color(0x0FFFFFFF))
+                    .border(if (on) 2.dp else 1.dp, if (on) Color(0xFFE53935) else Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                    .clickable { pick = i }
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Canvas(
+                    Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                ) { bustFramed(look, BG_BAY, FRAME_AVATAR) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(crashRoles[i] + ", " + v.age, color = InkText, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (on) Box(
+                            Modifier
+                                .background(Color(0xFFE53935), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) { Text("TAKE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    }
+                    Text(crashNote(v), color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Text(
+            "Tap one to take. Then you do the exam on that patient as usual.",
+            color = MuteText, fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+        )
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            GreenButton(
+                if (pick < 0) "Pick a patient" else "Take the " + crashRoles[pick].lowercase(),
+                Modifier.fillMaxWidth(0.8f), enabled = pick >= 0
+            ) { rs.pickVictim(pick) }
+        }
     }
 }
