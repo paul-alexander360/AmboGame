@@ -1458,7 +1458,7 @@ fun DriveScene(
                 .clickable { finish() }
                 .padding(horizontal = 18.dp, vertical = 10.dp)
         ) {
-            Text("Skip ▸", color = InkText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text("Skip ▸", color = DarkInk, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         }
         if (arrived) {
             Box(
