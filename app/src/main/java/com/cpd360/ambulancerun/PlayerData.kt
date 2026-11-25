@@ -57,12 +57,12 @@ fun itemCost(d: DrItem): Int {
 // A treatment opens once you own the test from the same level, if there is one
 fun itemNeeds(d: DrItem): DrItem? = if (d.treat) itemsFor(itemLevel(d)).firstOrNull { !it.treat } else null
 
-val shopTestNames = listOf("Vitals", "Pulse ox test", "Glucose test", "Stroke test", "ECG")
+val shopTestNames = listOf("Vitals", "Pulse ox test", "Glucose test", "Stroke test", "ECG", "Trauma exam")
 val shopTestDescs = listOf(
     "Blood pressure and pulse", "Checks oxygen levels", "Checks blood sugar",
-    "Checks for signs of a stroke", "Reads the heart rhythm"
+    "Checks for signs of a stroke", "Reads the heart rhythm", "Checks for bleeding and broken bones"
 )
-val shopTestGlyphs = listOf("💓", "🫁", "🩸", "🧠", "📈")
+val shopTestGlyphs = listOf("💓", "🫁", "🩸", "🧠", "📈", "🦴")
 val shopTreatNames = listOf("Oxygen", "Glucose", "Splint / Stop bleeding", "CPR", "Shock")
 val shopTreatDescs = listOf(
     "Give oxygen when it's low", "Give sugar when it's low", "Stop bleeding and splint broken bones",
@@ -123,7 +123,7 @@ class PlayerData(private val ctx: Context) {
     val tipsSeen = mutableStateListOf<String>()
 
     // Tests and treatments bought from Dr. Ray. Indexes match testNames and treatNames.
-    val testsOwned = mutableStateListOf(false, false, false, false, false)
+    val testsOwned = mutableStateListOf(false, false, false, false, false, false)
     val treatsOwned = mutableStateListOf(false, false, false, false, false)
 
     // Certification moves up with skills: Unit until Vitals, Aid until the Stroke test, then Medic
@@ -331,10 +331,12 @@ class PlayerData(private val ctx: Context) {
             cityIdx = o.optInt("cityIdx", 0).coerceIn(0, 4)
             goodRuns = o.optInt("goodRuns", 0).coerceIn(0, RUNS_PER_CITY)
             // Saves from before items were sold one at a time own everything up to their level
+            // and anything new added to a level they've already reached (like the Trauma exam)
             if (o.has("testsOwned")) {
                 readFlags(o, "testsOwned", testsOwned)
                 readFlags(o, "treatsOwned", treatsOwned)
-            } else grantUpTo(cityLevel)
+            }
+            grantUpTo(cityLevel)
             female = o.optBoolean("female", false)
             // Saves from before the painted look had 3 skins and 3 hair styles. Map them across once.
             val newLook = o.optBoolean("look2", false)

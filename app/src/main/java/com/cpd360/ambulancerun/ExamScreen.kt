@@ -144,12 +144,17 @@ fun ExamScreen(p: Patient, level: Int, player: PlayerData, onDone: () -> Unit) {
                 Modifier.weight(1f), "ECG", player.hasTest(4), testLevels[4], p.tested[4],
                 if (p.heartAttack) "Heart attack" else "Normal", ""
             )
-            Spacer(Modifier.weight(2f))
+            ResultTile(
+                Modifier.weight(1f), "Trauma", player.hasTest(5), testLevels[5], p.tested[5],
+                listOf("No injury", "Bleeding", "Broken bone")[p.injury.coerceIn(0, 2)], ""
+            )
+            Spacer(Modifier.weight(1f))
         }
         Label("Tests")
-        val testGlyphs = listOf("♥", "SpO₂", "💧", "🧠", "ECG")
+        val testGlyphs = listOf("♥", "SpO₂", "💧", "🧠", "ECG", "🦴")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            for (k in 0..4) {
+            // Shown in the order they're learned
+            for (k in intArrayOf(0, 1, 2, 5, 3, 4)) {
                 Tool(testNames[k], testGlyphs[k], !player.hasTest(k), testLevels[k], p.tested[k], false) { p.test(k) }
             }
         }
@@ -215,10 +220,10 @@ private fun ResultTile(
 private fun Tool(
     label: String, glyph: String, locked: Boolean, unlockLevel: Int, done: Boolean, treatment: Boolean, onClick: () -> Unit
 ) {
-    Column(Modifier.width(66.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
-                .size(58.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(

@@ -16,9 +16,9 @@ const val DIABETIC = 4
 const val TRAUMA = 5
 const val NEURO = 6
 
-// Tests: 0 vitals (BP and pulse), 1 pulse ox, 2 glucose, 3 stroke, 4 ECG
-val testNames = listOf("Vitals", "Pulse ox", "Glucose", "Stroke", "ECG")
-val testLevels = intArrayOf(2, 3, 4, 7, 8)
+// Tests: 0 vitals (BP and pulse), 1 pulse ox, 2 glucose, 3 stroke, 4 ECG, 5 trauma exam
+val testNames = listOf("Vitals", "Pulse ox", "Glucose", "Stroke", "ECG", "Trauma")
+val testLevels = intArrayOf(2, 3, 4, 7, 8, 5)
 
 // Treatments: 0 oxygen, 1 glucose, 2 splint / stop bleeding, 3 CPR, 4 shock
 val treatNames = listOf("Oxygen", "Glucose", "Splint / Stop bleeding", "CPR", "Shock")
@@ -52,7 +52,7 @@ class Patient(val level: Int, rnd: Random) {
     var helped by mutableStateOf(false)
     var dead by mutableStateOf(false)
 
-    val tested = mutableStateListOf(false, false, false, false, false)
+    val tested = mutableStateListOf(false, false, false, false, false, false)
     val treated = mutableStateListOf(false, false, false, false, false)
 
     private val startOx: Int
@@ -216,6 +216,7 @@ class Patient(val level: Int, rnd: Random) {
             CARDIAC -> l.add(4)
             RESP -> l.add(1)
             DIABETIC -> l.add(2)
+            TRAUMA -> l.add(5)
             NEURO -> {
                 l.add(3)
                 l.add(2)

@@ -530,7 +530,7 @@ private fun skillTip(level: Int): Pair<String, String> = when (level) {
     2 -> "New skill: Vitals!" to "Tap **Vitals** on every patient who is awake. It checks blood pressure and pulse. Numbers in red mean trouble."
     3 -> "New skill: Oxygen!" to "Trouble breathing? Run **Pulse ox**. Under 93% is low and under 90% is dangerous, so give **Oxygen** before you leave."
     4 -> "New skill: Glucose!" to "Weak or shaky? Run the **Glucose** test. Low sugar, give **Glucose**. High sugar needs the hospital, not glucose."
-    5 -> "New skill: Splints!" to "Bad cut or broken bone? Use **Splint / Stop bleeding** before you go. A sore bump on the head doesn't need it."
+    5 -> "New skill: Trauma exam!" to "Hurt? Run the **Trauma** exam. Bleeding or a broken bone needs **Splint / Stop bleeding** before you go. A sore bump on the head doesn't."
     6 -> "New skill: CPR!" to "Not breathing and no pulse? Start **CPR** right away. It doesn't always work, but without it they have no chance."
     7 -> "New skill: Stroke test!" to "Dizzy or feeling strange? Run the **Stroke** test and **Glucose**. A stroke needs a bigger hospital."
     else -> "New skill: ECG and Shock!" to "Chest pain? Run the **ECG**. If the pulse is under 80 or over 120, a **Shock** brings it back to normal."
