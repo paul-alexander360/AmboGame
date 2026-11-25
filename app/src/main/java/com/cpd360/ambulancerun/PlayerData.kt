@@ -54,8 +54,10 @@ val kitGlyphs = listOf("🩺", "💓", "🫁", "🩸", "🩹", "❤️", "🧠",
 
 class PlayerData(private val ctx: Context) {
     var name by mutableStateOf("Player")
-    var unit = "1"
-    var org = "County EMS"
+    // Unit number, set on the character screen
+    var unit by mutableStateOf("1")
+    // The organization you respond as, set on the character screen
+    var org by mutableStateOf("County EMS")
     var orgColor = 0xFFE53935.toInt()
     var credits by mutableIntStateOf(0)
     // Premium currency
@@ -91,6 +93,16 @@ class PlayerData(private val ctx: Context) {
 
     // Guide tips already shown by Dot and Dr. Ray
     val tipsSeen = mutableStateListOf<String>()
+
+    // Certification moves up with skills: Unit until Vitals (Level 2), Aid until the Stroke test (Level 7), then Medic
+    val cert: String
+        get() = if (cityLevel >= 7) "Medic" else if (cityLevel >= 2) "Aid" else "Unit"
+
+    // What Dot calls you, like "Aid 12"
+    val callSign: String get() = cert + " " + (if (unit == "") "1" else unit)
+
+    // Organization and call sign, like "County EMS · Aid 12"
+    val orgLine: String get() = if (org == "") callSign else "$org · $callSign"
 
     fun seen(k: String): Boolean = tipsSeen.contains(k)
 
@@ -202,6 +214,15 @@ class PlayerData(private val ctx: Context) {
                 f.delete()
                 t.renameTo(f)
             }
+        } catch (e: Exception) {
+        }
+    }
+
+    // Test tools: delete the save so the next start is a brand new character
+    fun wipe() {
+        try {
+            File(ctx.filesDir, "player.json").delete()
+            File(ctx.filesDir, "player.tmp").delete()
         } catch (e: Exception) {
         }
     }

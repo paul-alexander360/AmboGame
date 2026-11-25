@@ -11,6 +11,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -123,7 +129,6 @@ private fun NavBtn(kind: Int, onClick: () -> Unit) {
 fun HomeScreen(version: String, player: PlayerData) {
     val rs = remember { RouteState(player) }
     val fast = remember(rs.version, rs.stage) { rs.fastest() }
-    val par = fast * 1.6
     var screen by remember { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
     val guide = remember { GuideState() }
@@ -233,7 +238,10 @@ fun HomeScreen(version: String, player: PlayerData) {
                 .safeDrawingPadding()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            TopBar(rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared(), par) { menu = true }
+            TopBar(
+                rs.level, rs.idx, player.goodRuns, rs.kitNeeded(), rs.cityCleared(),
+                canDispatch(rs), callWaiting(rs, guide), { guide.showCall = true }
+            ) { menu = true }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -334,15 +342,22 @@ fun HomeScreen(version: String, player: PlayerData) {
             val tip = mapTip(rs, player, guide)
             if (tip != "") {
                 DotTip(tip, rs) { player.markSeen(tip) }
-            } else if (rs.stage == 0 && !rs.done && !rs.started && rs.path.isEmpty() && guide.callFor != rs.version) {
-                CallCard(rs, player, guide, fast) { guide.callFor = rs.version }
+            } else if (canDispatch(rs) && (guide.showCall || (callWaiting(rs, guide) && !player.seen("intro")))) {
+                // Dot only gives the call when Dispatch Me is tapped. The very first call still opens by itself.
+                CallCard(rs, player, guide, fast) {
+                    guide.callFor = rs.patient
+                    guide.showCall = false
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone: Boolean, par: Double, onMenu: () -> Unit) {
+private fun TopBar(
+    level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone: Boolean,
+    canDispatch: Boolean, waiting: Boolean, onDispatch: () -> Unit, onMenu: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -400,22 +415,37 @@ private fun TopBar(level: Int, idx: Int, good: Int, kitNeeded: Boolean, allDone:
             }
         }
         Spacer(Modifier.width(10.dp))
-        Row(
-            modifier = Modifier
-                .background(Color(0x33FFE66B), RoundedCornerShape(10.dp))
-                .padding(horizontal = 9.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Canvas(Modifier.size(14.dp)) {
-                val w = size.width
-                val c = Offset(w / 2f, w / 2f)
-                drawCircle(CallYellow, w * 0.42f, c, style = Stroke(w * 0.14f))
-                drawLine(CallYellow, c, Offset(c.x, w * 0.22f), w * 0.14f, StrokeCap.Round)
-                drawLine(CallYellow, c, Offset(w * 0.72f, w * 0.62f), w * 0.14f, StrokeCap.Round)
-            }
-            Spacer(Modifier.width(5.dp))
-            Text(fmt(par), color = CallYellow, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        DispatchButton(canDispatch, waiting, onDispatch)
+    }
+}
+
+// Dispatch Me: opens Dot's call card. The red light blinks while a call is waiting.
+@Composable
+private fun DispatchButton(enabled: Boolean, waiting: Boolean, onClick: () -> Unit) {
+    val blink = rememberInfiniteTransition(label = "dispatch")
+    val a by blink.animateFloat(
+        1f, 0.25f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "dispatchLight"
+    )
+    Row(
+        modifier = Modifier
+            .height(40.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(ParkGreen)
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (waiting) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .alpha(a)
+                    .background(RouteRed, CircleShape)
+            )
+            Spacer(Modifier.width(7.dp))
         }
+        Text("Dispatch Me", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -497,7 +527,8 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(player.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Text("Paramedic · Level " + player.level, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(player.orgLine, color = CallYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Level " + player.level, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Box(
                     Modifier
