@@ -49,7 +49,24 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
-private val Road = Color(0xFFA9ADE3)
+// Night city: wet asphalt, concrete sidewalks, rooftops seen from above
+private val Road = Color(0xFF34373C)
+private val Asphalt = Color(0xFF3A3D42)
+private val Walk = Color(0xFF8C8A84)
+private val WalkEdge = Color(0xFFB5B1A6)
+private val Lane = Color(0xFFE8E2C8)
+private val Lamp = Color(0xFFFFD27A)
+private val houseRoofs = listOf(Color(0xFF7A4B3A), Color(0xFF5D5650), Color(0xFF8A6A4A), Color(0xFF545B63))
+private val towerRoofs = listOf(Color(0xFF5F6670), Color(0xFF6D6A63), Color(0xFF575E68))
+private val factoryRoofs = listOf(Color(0xFF7B7F86), Color(0xFF8E8A7E), Color(0xFF6C7078))
+private val carCols = listOf(Color(0xFFC0392B), Color(0xFFECF0F1), Color(0xFF2C3E50), Color(0xFF7F8C8D), Color(0xFF2E86DE), Color(0xFF151515))
+
+// A small repeatable number from a position, so every city keeps its look between frames
+private fun hsh(a: Int, b: Int): Int {
+    var h = a * 73856093 xor b * 19349663
+    h = h xor (h ushr 13)
+    return (h * 1274126177) and 0x7FFFFFFF
+}
 
 @Composable
 fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
@@ -186,7 +203,7 @@ fun CityMap(rs: RouteState, modifier: Modifier = Modifier) {
         Canvas(Modifier.fillMaxSize()) {
             val s0 = size.width / city.w
             val o = mapOrigin(city, size.width, size.height, s0, zm, pan)
-            drawRect(Color(0xFF9BD468))
+            drawRect(Asphalt)
             translate(o.x, o.y) {
                 scale(s0 * zm, Offset.Zero) { drawStatic(city, s0 * zm) }
             }
@@ -217,13 +234,10 @@ private fun clampPan(pn: Offset, c: CityData, w: Float, h: Float, s0: Float, z: 
     return Offset(pn.x.coerceIn(-mx, mx), pn.y.coerceIn(-my, my))
 }
 
-private fun zoneCol(z: Int, which: Int, d: Int): Color {
-    val base = when (which) {
-        0 -> when (z) { 0 -> Color(0xFFB9E67F); 1 -> Color(0xFFFFE59A); else -> Color(0xFFDCCFF3) }
-        1 -> when (z) { 0 -> Color(0xFF8FCB59); 1 -> Color(0xFFFFCB5A); else -> Color(0xFFB9A7DF) }
-        else -> when (z) { 0 -> Color(0xFF6FAE3E); 1 -> Color(0xFFD9A93A); else -> Color(0xFF9684BB) }
-    }
-    return lerp(base, Color(0xFF2B2B2B), 0.1f * d)
+// Ground inside a block: lawns for homes, paved lots downtown and in the factory district
+private fun zoneGround(z: Int, d: Int): Color {
+    val base = when (z) { 0 -> Color(0xFF3E5F2E); 1 -> Color(0xFF5A5852); else -> Color(0xFF55585E) }
+    return lerp(base, Color(0xFF1E1F22), 0.08f * d)
 }
 
 private fun DrawScope.box(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float = 0f, a: Float = 1f) =
@@ -241,48 +255,99 @@ private fun DrawScope.poly(c: Color, a: Float, vararg p: Float) {
     drawPath(path, c, alpha = a)
 }
 
-private fun DrawScope.house(cx: Float, cy: Float, s: Float) = translate(cx, cy) {
-    scale(s, Offset.Zero) {
-        drawOval(Color.Black, Offset(-17f, 14f), Size(34f, 8f), alpha = 0.15f)
-        box(Color(0xFFFFE0B2), -14f, -2f, 28f, 19f, 4f)
-        box(Color(0xFFE6C690), 7f, -2f, 7f, 19f, 3f)
-        poly(Color(0xFFE53935), 1f, -17f, -3f, 0f, -18f, 17f, -3f)
-        poly(Color.White, 0.22f, -17f, -3f, 0f, -18f, 0f, -3f)
-        box(Color(0xFF8D5A3C), -4f, 6f, 7f, 11f, 2f)
+// Rooftops seen from above. Each casts a soft shadow down and to the right.
+private fun DrawScope.roofShadow(x: Float, y: Float, w: Float, h: Float, off: Float) {
+    for (g in 0..2) {
+        val e = g * 1.2f
+        box(Color.Black, x + off - e, y + off - e, w + 2f * e, h + 2f * e, 2f + e, 0.16f)
     }
 }
 
-private fun DrawScope.tower(cx: Float, cy: Float, s: Float) = translate(cx, cy) {
-    scale(s, Offset.Zero) {
-        drawOval(Color.Black, Offset(-17f, 15f), Size(34f, 8f), alpha = 0.15f)
-        box(Color(0xFF4FC3F7), -14f, -22f, 28f, 40f, 6f)
-        box(Color(0xFF1E9BDB), 5f, -22f, 9f, 40f, 5f)
-        box(Color.White, -14f, -22f, 9f, 40f, 5f, 0.28f)
-        for (wy in floatArrayOf(-14f, -5f, 4f)) for (wx in floatArrayOf(-8f, 2f)) {
-            box(Color(0xFFE1F5FE), wx, wy, 6f, 5f, 1.5f)
-        }
+private fun DrawScope.house(cx: Float, cy: Float, s: Float, v: Int) {
+    val w = 30f * s
+    val x = cx - w / 2f
+    val y = cy - w / 2f
+    roofShadow(x, y, w, w, 3f)
+    val roof = houseRoofs[v % houseRoofs.size]
+    box(roof, x, y, w, w, 1.5f)
+    // Pitched roof: the lit half and the ridge line
+    box(Color.White, x, y, w, w / 2f, 1.5f, 0.09f)
+    box(Color.Black, x, y + w / 2f, w, w / 2f, 1.5f, 0.12f)
+    drawLine(Color.Black, Offset(x, cy), Offset(x + w, cy), 0.8f, alpha = 0.4f)
+    if (v % 3 == 0) box(Color(0xFF2A2018), x + w * 0.66f, y + w * 0.12f, w * 0.14f, w * 0.14f, 0.5f)
+}
+
+private fun DrawScope.tower(cx: Float, cy: Float, s: Float, v: Int) {
+    val w = 34f * s
+    val x = cx - w / 2f
+    val y = cy - w / 2f
+    roofShadow(x, y, w, w, 6f)
+    box(towerRoofs[v % towerRoofs.size], x, y, w, w, 1.5f)
+    drawRoundRect(Color(0xFFC9C6BD), Offset(x + 1f, y + 1f), Size(w - 2f, w - 2f), CornerRadius(1f), alpha = 0.5f, style = Stroke(0.9f))
+    // Air units on the roof
+    for (k in 0..1) {
+        val ax = x + 3f + ((v * 7 + k * 11) % 10) / 10f * (w - 11f)
+        val ay = y + 3f + ((v * 5 + k * 13) % 10) / 10f * (w - 10f)
+        box(Color.Black, ax + 1.2f, ay + 1.2f, 5f, 4.4f, 0.5f, 0.5f)
+        box(Color(0xFFB9BCC2), ax, ay, 5f, 4.4f, 0.5f)
+        drawCircle(Color(0xFF6D7076), 1.4f, Offset(ax + 2.5f, ay + 2.2f))
+    }
+    // A red beacon on the tallest ones
+    if (v % 2 == 0) {
+        drawCircle(Color(0xFFFF3B3B), 3.5f, Offset(x + w - 3f, y + 3f), alpha = 0.25f)
+        drawCircle(Color(0xFFFF5A52), 1.2f, Offset(x + w - 3f, y + 3f))
     }
 }
 
-private fun DrawScope.factory(cx: Float, cy: Float, s: Float) = translate(cx, cy) {
-    scale(s, Offset.Zero) {
-        drawOval(Color.Black, Offset(-20f, 14f), Size(40f, 8f), alpha = 0.15f)
-        box(Color(0xFF8D6E63), 6f, -20f, 7f, 17f, 3f)
-        drawCircle(Color.White, 5f, Offset(10f, -25f))
-        box(Color(0xFFFFB74D), -18f, -6f, 36f, 23f, 5f)
-        box(Color(0xFFF29A2E), 8f, -6f, 10f, 23f, 5f)
-        box(Color.White, -18f, -6f, 10f, 23f, 5f, 0.25f)
-        box(Color(0xFF8D5A3C), -6f, 3f, 10f, 14f, 2f)
-    }
+private fun DrawScope.factory(cx: Float, cy: Float, s: Float, v: Int) {
+    val w = 36f * s
+    val h = 28f * s
+    val x = cx - w / 2f
+    val y = cy - h / 2f
+    roofShadow(x, y, w, h, 4f)
+    box(factoryRoofs[v % factoryRoofs.size], x, y, w, h, 1f)
+    // Saw-tooth roof stripes
+    for (k in 1..3) drawLine(Color.Black, Offset(x + w * k / 4f, y), Offset(x + w * k / 4f, y + h), 0.8f, alpha = 0.3f)
+    box(Color.White, x, y, w, 2f, 1f, 0.12f)
+    // Chimney with a little smoke
+    drawCircle(Color.Black, 3.4f, Offset(x + w - 3f, y + 4.5f), alpha = 0.45f)
+    drawCircle(Color(0xFF8D6E63), 2.6f, Offset(x + w - 4f, y + 3.5f))
+    drawCircle(Color(0xFF2B2B2B), 1.4f, Offset(x + w - 4f, y + 3.5f))
+    drawCircle(Color(0xFFCFD2D8), 4f, Offset(x + w + 1f, y - 1f), alpha = 0.18f)
 }
 
+// Hospital roof with a helipad and a glowing red light
 private fun DrawScope.hospital(cx: Float, cy: Float) = translate(cx, cy) {
-    drawOval(Color.Black, Offset(-12f, 9f), Size(24f, 6f), alpha = 0.15f)
-    box(Color(0xFFB8BDE6), -11.5f, -10.5f, 23f, 21f, 2f)
-    box(Color.White, -11f, -10f, 22f, 20f, 2f)
-    box(Color(0xFFE8EAFB), -11f, -10f, 22f, 4f)
-    box(Color(0xFFE53935), -1.8f, -5f, 3.6f, 11f)
-    box(Color(0xFFE53935), -5.5f, -1.5f, 11f, 3.6f)
+    roofShadow(-11f, -10f, 22f, 20f, 4f)
+    box(Color(0xFFD9DBE0), -11f, -10f, 22f, 20f, 1.5f)
+    box(Color.Black, -11f, 3f, 22f, 7f, 1.5f, 0.08f)
+    val y = Color(0xFFF2C230)
+    drawCircle(y, 7f, Offset(0f, 0f), style = Stroke(1.1f))
+    box(y, -3.6f, -4f, 1.6f, 8f)
+    box(y, 2f, -4f, 1.6f, 8f)
+    box(y, -3.6f, -0.8f, 7.2f, 1.6f)
+    drawCircle(Color(0xFFFF3030), 4f, Offset(8f, -7f), alpha = 0.3f)
+    box(Color(0xFFE53935), 6.5f, -8.5f, 3f, 3f, 0.6f)
+}
+
+// A tree seen from above
+private fun DrawScope.tree(x: Float, y: Float, r: Float) {
+    drawCircle(Color.Black, r, Offset(x + 2f, y + 2.5f), alpha = 0.45f)
+    drawCircle(
+        Brush.radialGradient(
+            listOf(Color(0xFF4C7A3A), Color(0xFF2C5222), Color(0xFF17331A)),
+            center = Offset(x - r * 0.3f, y - r * 0.4f), radius = r * 1.5f
+        ),
+        r, Offset(x, y)
+    )
+}
+
+// A parked car along the curb
+private fun DrawScope.car(x: Float, y: Float, vert: Boolean, c: Color) {
+    val w = if (vert) 4.5f else 10f
+    val h = if (vert) 10f else 4.5f
+    box(c, x, y, w, h, 1.5f)
+    box(Color(0xFF1B2A3A), x + (if (vert) 0.8f else 3f), y + (if (vert) 3f else 0.8f), if (vert) 3f else 3.5f, if (vert) 3.5f else 3f, 0.4f, 0.75f)
 }
 
 private fun DrawScope.chev(x: Float, y: Float, deg: Float) = translate(x, y) {
@@ -356,16 +421,16 @@ private fun DrawScope.hospitalL(cx: Float, cy: Float, lv: Int) {
 private fun DrawScope.drawStatic(c: CityData, sc: Float) {
     val n = c.n
     val detail = sc >= 2f
-    box(Color(0xFF9BD468), 0f, 0f, c.w, c.h)
+    box(Asphalt, 0f, 0f, c.w, c.h)
     for (j in 0..n) box(Road, 0f, c.nodeY(j) - 8f, c.w, 16f)
     for (i in 0..n) box(Road, c.nodeX(i) - 8f, 12f, 16f, c.h - 24f)
     val dash = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
-    val yellow = Color(0xFFFFE66B)
-    val pot = Color(0xFF5B5F9A)
+    val yellow = Lane
+    val pot = Color(0xFF1E2024)
     for (j in 0..n) for (b in 0 until n) {
         val a = 27f + 80f * b
         val y = c.nodeY(j)
-        drawLine(if (c.owH[j] != 0) Color.White else yellow, Offset(a, y), Offset(a + 64f, y), 2f, pathEffect = dash)
+        drawLine(if (c.owH[j] != 0) Color.White else yellow, Offset(a, y), Offset(a + 64f, y), 1.4f, alpha = 0.7f, pathEffect = dash)
         if (c.qH[j * n + b] == 2) {
             drawOval(pot, Offset(a + 16f, y - 6f), Size(9f, 4f), alpha = 0.55f)
             drawOval(pot, Offset(a + 38f, y + 3f), Size(9f, 4f), alpha = 0.55f)
@@ -374,7 +439,7 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
     for (i in 0..n) for (b in 0 until n) {
         val a = 28f + 80f * b
         val x = c.nodeX(i)
-        drawLine(if (c.owV[i] != 0) Color.White else yellow, Offset(x, a), Offset(x, a + 64f), 2f, pathEffect = dash)
+        drawLine(if (c.owV[i] != 0) Color.White else yellow, Offset(x, a), Offset(x, a + 64f), 1.4f, alpha = 0.7f, pathEffect = dash)
         if (c.qV[i * n + b] == 2) {
             drawOval(pot, Offset(x - 6f, a + 16f), Size(4f, 9f), alpha = 0.55f)
             drawOval(pot, Offset(x + 3f, a + 38f), Size(4f, 9f), alpha = 0.55f)
@@ -382,21 +447,18 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
     }
     val cellX = floatArrayOf(18f, 46f, 18f, 46f)
     val cellY = floatArrayOf(18f, 18f, 46f, 46f)
-    val dw = Color(0xFFE2D39B)
-    val ap = Color(0xFFBFC2EC)
-    val door = Color(0xFF8D5A3C)
+    val dw = Color(0xFF6F6D68)
+    val ap = Color(0xFF9C9A93)
+    val door = Color(0xFF2A2018)
     for (r in 0 until n) for (cc in 0 until n) {
         val bx = 27f + 80f * cc
         val by = 28f + 80f * r
         val z = c.zone[r * n + cc]
         val d = c.dens[r * n + cc]
-        box(zoneCol(z, 2, d), bx + 2f, by + 7f, 60f, 60f)
-        box(Color(0xFFF3E2A9), bx + 2f, by + 2f, 60f, 60f)
-        drawRect(
-            Brush.verticalGradient(listOf(zoneCol(z, 0, d), zoneCol(z, 1, d)), startY = by + 5f, endY = by + 59f),
-            Offset(bx + 5f, by + 5f), Size(54f, 54f)
-        )
-        if (detail) box(Color.White, bx + 9f, by + 6.5f, 46f, 3f, 0f, 0.28f)
+        box(Walk, bx + 2f, by + 2f, 60f, 60f, 3f)
+        drawRoundRect(WalkEdge, Offset(bx + 2f, by + 2f), Size(60f, 60f), CornerRadius(3f), style = Stroke(0.8f))
+        box(zoneGround(z, d), bx + 5f, by + 5f, 54f, 54f, 1.5f)
+        if (detail && z == 0) tree(bx + 32f, by + 32f, 4.5f)
         for (k in 0..3) {
             val cx = bx + cellX[k]
             val cy = by + cellY[k]
@@ -415,17 +477,33 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             } else if (hl != null) {
                 hospitalL(cx, cy, hl)
             } else if (detail) {
+                val v = hsh(key, d)
                 when (z) {
-                    0 -> house(cx, cy, 0.58f)
-                    1 -> tower(cx, cy, 0.62f)
-                    else -> factory(cx, cy + 3f, 0.5f)
+                    0 -> house(cx, cy, 0.62f, v)
+                    1 -> tower(cx, cy, 0.62f, v)
+                    else -> factory(cx, cy, 0.62f, v)
                 }
             } else {
-                box(zoneCol(z, 2, d), cx - 8f, cy - 8f, 16f, 16f, 3f)
+                val v = hsh(key, d)
+                box(when (z) { 0 -> houseRoofs[v % 4]; 1 -> towerRoofs[v % 3]; else -> factoryRoofs[v % 3] }, cx - 9f, cy - 9f, 18f, 18f, 1.5f)
             }
         }
     }
     if (detail) {
+        // Cars parked along some curbs
+        for (r in 0 until n) for (cc in 0 until n) {
+            val v = hsh(r * 31 + 7, cc * 17 + 3)
+            if (v % 3 == 0) continue
+            val bx = 27f + 80f * cc
+            val by = 28f + 80f * r
+            val col = carCols[v % carCols.size]
+            when (v % 4) {
+                0 -> car(bx + 10f + (v % 30), by - 6f, false, col)
+                1 -> car(bx + 66f, by + 10f + (v % 30), true, col)
+                2 -> car(bx + 14f + (v % 26), by + 66f, false, col)
+                else -> car(bx - 6.5f, by + 12f + (v % 28), true, col)
+            }
+        }
         for (j in 0..n) for (b in 0 until n) for (o in floatArrayOf(-16f, 0f, 16f)) {
             val x = 27f + 80f * b + 32f + o
             val y = c.nodeY(j)
@@ -464,7 +542,16 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             if (px < 4f || px > c.w - 4f || py < 4f || py > c.h - 4f) continue
             if (isL) light(px, py) else stopSign(px, py)
         }
+        // Street lamps light every few corners
+        if ((i * 3 + j) % 4 == 0) {
+            drawCircle(
+                Brush.radialGradient(listOf(Lamp.copy(alpha = 0.22f), Lamp.copy(alpha = 0f)), Offset(x, y), 16f),
+                16f, Offset(x, y)
+            )
+        }
     }
+    // Wet night sheen over the whole city
+    box(Color(0xFF3B6EA5), 0f, 0f, c.w, c.h, 0f, 0.12f)
 }
 
 private fun DrawScope.glow(cx: Float, cy: Float, p: Float, k: Float) {
