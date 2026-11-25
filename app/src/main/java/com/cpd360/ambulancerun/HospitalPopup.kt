@@ -23,6 +23,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -41,20 +50,95 @@ fun certsFor(level: Int): IntArray = when (level) {
     else -> intArrayOf(2)
 }
 
+private val certNames = listOf("Heart", "Breathing", "Medical", "Stroke", "Trauma")
+
+// Double tap a hospital: a night photo, its level and what it treats. Tap to close.
 @Composable
 fun HospitalPopup(h: Hospital, onClose: () -> Unit) {
+    val treats = certsFor(h.level)
     Column(
         modifier = Modifier
-            .background(Color(0xF2FFFFFF), RoundedCornerShape(18.dp))
-            .border(2.dp, Color(0xFF0B5BD3), RoundedCornerShape(18.dp))
+            .width(320.dp)
+            .shadow(20.dp, RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
+            .background(Color(0xEB141820))
+            .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(28.dp))
             .clickable { onClose() }
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(h.name, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (k in certsFor(h.level)) CertIcon(k)
+        Canvas(Modifier.fillMaxWidth().height(140.dp)) { hospitalPhoto() }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(Color(0xFF2FBF5F), CircleShape))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "HOSPITAL · LEVEL " + h.level, color = GlassMute, fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(h.name, color = InkText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(10.dp))
+            FlowRowCerts(treats)
+            Spacer(Modifier.height(10.dp))
+            Text("Tap to close", color = MuteText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowRowCerts(treats: IntArray) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (k in certNames.indices) {
+            val yes = treats.contains(k)
+            Row(
+                Modifier
+                    .background(if (yes) Color(0x2E2FBF5F) else Color(0x0DFFFFFF), RoundedCornerShape(10.dp))
+                    .border(1.dp, if (yes) Color(0x802FBF5F) else Color(0x1FFFFFFF), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    (if (yes) "✓ " else "") + certNames[k],
+                    color = if (yes) Color(0xFF7CF29A) else Color(0x73CFD5E2),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    textDecoration = if (yes) null else TextDecoration.LineThrough
+                )
+            }
+        }
+    }
+}
+
+// The hospital at night: lit windows, a glowing H sign and the emergency entrance
+private fun DrawScope.hospitalPhoto() {
+    val sc = maxOf(size.width / 318f, size.height / 150f)
+    translate((size.width - 318f * sc) / 2f, (size.height - 150f * sc) / 2f) {
+        scale(sc, Offset.Zero) {
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF0B1424), Color(0xFF1D2A44)), 0f, 150f), Offset.Zero, Size(318f, 150f))
+            for (i in 0..29) drawCircle(Color.White, if (i % 3 != 0) 0.7f else 1.1f, Offset(((i * 53) % 318).toFloat(), ((i * 29) % 50).toFloat()), alpha = 0.7f)
+            drawRect(Color(0xFFC9CCD2), Offset(60f, 30f), Size(200f, 110f))
+            drawRect(Color.Black, Offset(60f, 30f), Size(200f, 110f), alpha = 0.25f)
+            drawRect(Color(0xFFB5B8BF), Offset(40f, 70f), Size(60f, 70f))
+            drawRect(Color(0xFFAEB1B8), Offset(220f, 60f), Size(70f, 80f))
+            for (i in 0..39) {
+                val x = 70f + (i % 10) * 18f
+                val y = 40f + (i / 10) * 20f
+                drawRect(if ((i * 7) % 5 != 0) Color(0xFFFFD98A) else Color(0xFF2A3446), Offset(x, y), Size(10f, 12f), alpha = 0.9f)
+            }
+            drawCircle(
+                Brush.radialGradient(listOf(Color(0x99FF4040), Color.Transparent), Offset(160f, 25f), 50f),
+                50f, Offset(160f, 25f)
+            )
+            drawRoundRect(Color(0xFFE53935), Offset(130f, 14f), Size(60f, 22f), CornerRadius(4f))
+            drawRect(Color.White, Offset(150f, 18f), Size(4f, 14f))
+            drawRect(Color.White, Offset(166f, 18f), Size(4f, 14f))
+            drawRect(Color.White, Offset(150f, 23.5f), Size(20f, 3f))
+            drawRect(Color(0xFF1A1D24), Offset(120f, 112f), Size(80f, 28f))
+            drawRect(Color(0xFFE53935), Offset(120f, 108f), Size(80f, 6f))
+            for (k in 0..5) drawRect(Color(0xFFFF8A80), Offset(130f + k * 11f, 122f), Size(7f, 5f), alpha = 0.8f)
+            drawRect(Color(0xFF2A2D33), Offset(0f, 138f), Size(318f, 12f))
+            drawCircle(Brush.radialGradient(listOf(Color(0x593A6BFF), Color.Transparent), Offset(60f, 120f), 45f), 45f, Offset(60f, 120f))
+            drawCircle(Brush.radialGradient(listOf(Color(0x4DFF3030), Color.Transparent), Offset(260f, 120f), 45f), 45f, Offset(260f, 120f))
         }
     }
 }
