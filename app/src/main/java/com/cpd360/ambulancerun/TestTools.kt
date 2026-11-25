@@ -44,11 +44,11 @@ import androidx.compose.ui.unit.sp
 // Highest character level the test page can set
 const val TEST_MAX_CHAR_LEVEL = 50
 
-private val TestBg = Color(0xFF2E3260)
-private val TestField = Color(0xFF262A52)
-private val TestBtnFill = Color(0xFF474B82)
-private val TestLabel = Color(0xFF8E92C4)
-private val TestGo = Color(0xFF6FAE3E)
+private val TestBg = Color(0xFF13161D)
+private val TestField = Color(0xFF0C0E13)
+private val TestBtnFill = Color(0xFF232833)
+private val TestLabel = Color(0xFF7D8699)
+private val TestGo = Color(0xFF2FBF5F)
 
 // Testing page: set credits, set the character level, and jump to any level, city and run count.
 @Composable
