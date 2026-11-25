@@ -624,7 +624,7 @@ fun DrScreen(player: PlayerData, level: Int, ready: Boolean, onBuy: () -> Unit, 
             else if (!ready) "Clear City 5 and I'll teach you the next skills."
             else if (player.credits < kitCost(level + 1)) "Ready when you are. Earn a few more credits first."
             else "You're ready for Level " + (level + 1) + "!"
-        GuideScene(true, bubble, Modifier.fillMaxWidth().height(150.dp))
+        GuideScene(true, bubble, Modifier.fillMaxWidth().height(220.dp))
         SectionTitle("You've learned")
         for (lv in 1..level) KitCard(lv, 0, false, "") { }
         if (level < MAX_LEVEL) {
