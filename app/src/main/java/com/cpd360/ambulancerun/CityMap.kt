@@ -299,6 +299,25 @@ private fun zoneGround(z: Int, d: Int): Color {
 private fun DrawScope.box(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float = 0f, a: Float = 1f) =
     drawRoundRect(c, Offset(x, y), Size(w, h), CornerRadius(r, r), alpha = a)
 
+// Bright concrete driveway from the front door to the curb, with a dark edge so it stands out
+// at night, a curb cut where it meets the sidewalk edge, and a warm porch light at the door.
+private val DriveC = Color(0xFFD8D2C2)
+private val DriveCut = Color(0xFFF2ECDC)
+private val DriveEdge = Color(0xFF14161A)
+private val Porch = Color(0xFFFFD27A)
+
+private fun DrawScope.driveway(x: Float, y: Float, w: Float, h: Float, ax: Float, ay: Float, aw: Float, ah: Float, dx: Float, dy: Float) {
+    box(DriveEdge, x - 1f, y - 1f, w + 2f, h + 2f, 1.5f, 0.85f)
+    box(DriveC, x, y, w, h, 1f)
+    box(DriveCut, ax, ay, aw, ah)
+    drawRect(DriveEdge, Offset(ax, ay), Size(aw, ah), style = Stroke(0.6f))
+    drawCircle(
+        Brush.radialGradient(listOf(Porch.copy(alpha = 0.55f), Porch.copy(alpha = 0f)), Offset(dx, dy), 9f),
+        9f, Offset(dx, dy)
+    )
+    drawCircle(Porch, 1.8f, Offset(dx, dy))
+}
+
 private fun DrawScope.poly(c: Color, a: Float, vararg p: Float) {
     val path = Path()
     path.moveTo(p[0], p[1])
@@ -503,9 +522,6 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
     }
     val cellX = floatArrayOf(18f, 46f, 18f, 46f)
     val cellY = floatArrayOf(18f, 18f, 46f, 46f)
-    val dw = Color(0xFF6F6D68)
-    val ap = Color(0xFF9C9A93)
-    val door = Color(0xFF2A2018)
     for (r in 0 until n) for (cc in 0 until n) {
         val bx = 27f + 80f * cc
         val by = 28f + 80f * r
@@ -520,10 +536,10 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             val cy = by + cellY[k]
             if (detail) {
                 when (k) {
-                    0 -> { box(dw, bx - 1f, cy - 3f, (cx - 9f) - (bx - 1f), 6f); box(ap, bx - 3f, cy - 5f, 3f, 10f); drawCircle(door, 1.8f, Offset(cx - 9f, cy)) }
-                    1 -> { box(dw, cx - 3f, by - 1f, 6f, (cy - 9f) - (by - 1f)); box(ap, cx - 5f, by - 3f, 10f, 3f); drawCircle(door, 1.8f, Offset(cx, cy - 9f)) }
-                    2 -> { box(dw, cx - 3f, cy + 9f, 6f, (by + 65f) - (cy + 9f)); box(ap, cx - 5f, by + 64f, 10f, 3f); drawCircle(door, 1.8f, Offset(cx, cy + 9f)) }
-                    else -> { box(dw, cx + 9f, cy - 3f, (bx + 65f) - (cx + 9f), 6f); box(ap, bx + 64f, cy - 5f, 3f, 10f); drawCircle(door, 1.8f, Offset(cx + 9f, cy)) }
+                    0 -> driveway(bx + 2f, cy - 4f, (cx - 9f) - (bx + 2f), 8f, bx + 2f, cy - 6f, 2f, 12f, cx - 9f, cy)
+                    1 -> driveway(cx - 4f, by + 2f, 8f, (cy - 9f) - (by + 2f), cx - 6f, by + 2f, 12f, 2f, cx, cy - 9f)
+                    2 -> driveway(cx - 4f, cy + 9f, 8f, (by + 62f) - (cy + 9f), cx - 6f, by + 60f, 12f, 2f, cx, cy + 9f)
+                    else -> driveway(cx + 9f, cy - 4f, (bx + 62f) - (cx + 9f), 8f, bx + 60f, cy - 6f, 2f, 12f, cx + 9f, cy)
                 }
             }
             val key = (r * n + cc) * 4 + k
