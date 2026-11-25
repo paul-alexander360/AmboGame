@@ -527,8 +527,8 @@ private fun Drawer(player: PlayerData, rs: RouteState, version: String, onClose:
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(player.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                if (player.org != "") Text(player.org, color = CallYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text("Paramedic · Level " + player.level, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(player.orgLine, color = CallYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Level " + player.level, color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Box(
                     Modifier

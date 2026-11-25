@@ -433,7 +433,7 @@ fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, o
     if (first) body += " Drag a route from your station to the glowing house. Pinch to zoom, two fingers to move."
     GuideCard(
         false,
-        if (first) "Your first call! Let's go." else "Medic " + rs.level + ", you've got a call!",
+        if (first) "Your first call! Let's go." else p.callSign + ", you've got a call!",
         body, "Respond",
         extra = {
             if (!first) {

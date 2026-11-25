@@ -49,6 +49,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -320,9 +322,9 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(player.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = InkText)
-                if (player.org != "") Text(player.org, fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold)
+                Text(player.orgLine, fontSize = 12.sp, color = Gold, fontWeight = FontWeight.Bold)
                 Text(
-                    "Paramedic · Level " + player.level + " · Rating " + "%.2f".format(player.drive),
+                    "Level " + player.level + " · Rating " + "%.2f".format(player.drive),
                     fontSize = 11.sp, color = MuteText, fontWeight = FontWeight.Bold
                 )
             }
@@ -357,6 +359,25 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                 )
             }
+            LabeledRow("Unit number") {
+                BasicTextField(
+                    value = player.unit,
+                    onValueChange = { t -> player.unit = t.filter { it.isDigit() }.take(4); player.save() },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
+                    cursorBrush = SolidColor(Gold),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SoftFill, RoundedCornerShape(10.dp))
+                        .border(1.dp, CardLine, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                )
+            }
+            Text(
+                "Certification: " + player.cert + ". Goes up to Aid when you learn Vitals, and Medic when you learn the Stroke test.",
+                fontSize = 12.sp, color = MuteText, fontWeight = FontWeight.Bold
+            )
             LabeledRow("Gender") {
                 Choice("Male", !player.female) { player.female = false; player.save() }
                 Choice("Female", player.female) { player.female = true; player.save() }
