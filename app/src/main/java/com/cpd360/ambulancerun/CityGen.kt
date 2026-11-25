@@ -7,6 +7,22 @@ class Slot(val bc: Int, val br: Int, val corner: Int)
 
 class Hospital(val slot: Slot, val level: Int, val name: String)
 
+// Road events: each city from Level 2 has one (two from Level 4 sometimes)
+const val EV_STORM = 0
+const val EV_WORK = 1
+const val EV_TRAIN = 2
+const val EV_SCHOOL = 3
+const val EV_RUSH = 4
+val eventNames = listOf("Storm", "Road work", "Train crossing", "School zone", "Rush hour")
+val eventGlyphs = listOf("⛈", "🚧", "🚆", "🏫", "🚗")
+val eventTips = listOf(
+    "A **storm** is soaking the city. Every road is a bit slower and crashes are more likely.",
+    "**Road work** has closed one block. Look for the orange cones and drive around it.",
+    "A **train** crosses the city. Each street that crosses the tracks adds a wait for the gates.",
+    "There's a **school zone**. The streets around it are slow, but you won't crash there.",
+    "It's **rush hour**. The two main roads in red are packed, slow and riskier."
+)
+
 object Levels {
     val sizes = arrayOf(
         intArrayOf(3, 4, 5, 5, 6),
@@ -87,6 +103,16 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
     )
     private val suffixes = listOf("Hospital", "Medical Center")
 
+    // Road events for this city (EV_ codes) and where they are
+    val events = ArrayList<Int>()
+    var workA = -1
+    var workB = -1
+    var trainRow = -1
+    var schoolBlock = -1
+    var rushRow = -1
+    var rushCol = -1
+    private var storm = false
+
     init {
         makeZones()
         makeDensity()
@@ -133,7 +159,95 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             hospKey[key(s)] = lv
         }
         call = pick()
+        makeEvents()
     }
+
+    private fun makeEvents() {
+        if (level < 2) return
+        val count = if (level >= 4 && rnd.nextInt(100) < 40) 2 else 1
+        val pool = mutableListOf(EV_STORM, EV_WORK, EV_TRAIN, EV_SCHOOL, EV_RUSH)
+        repeat(count) {
+            val e = pool.removeAt(rnd.nextInt(pool.size))
+            when (e) {
+                EV_STORM -> storm = true
+                EV_WORK -> if (!pickWork()) return@repeat
+                EV_TRAIN -> trainRow = rnd.nextInt(n)
+                EV_SCHOOL -> {
+                    val homes = (0 until n * n).filter { zone[it] == 0 }
+                    schoolBlock = if (homes.isEmpty()) rnd.nextInt(n * n) else homes[rnd.nextInt(homes.size)]
+                }
+                else -> {
+                    rushRow = 1 + rnd.nextInt(n - 1)
+                    rushCol = 1 + rnd.nextInt(n - 1)
+                }
+            }
+            events.add(e)
+        }
+    }
+
+    // Close one road piece that isn't in front of the station, a hospital or the call,
+    // and only if every corner can still reach every other one
+    private fun pickWork(): Boolean {
+        val keep = HashSet<Long>()
+        keep.add(edgeKey(segNodes(station)))
+        for (h in hospitals) keep.add(edgeKey(segNodes(h.slot)))
+        keep.add(edgeKey(segNodes(call)))
+        repeat(30) {
+            val a: Int
+            val b: Int
+            if (rnd.nextBoolean()) {
+                a = rnd.nextInt(m) * m + rnd.nextInt(n)
+                b = a + 1
+            } else {
+                a = rnd.nextInt(n) * m + rnd.nextInt(m)
+                b = a + m
+            }
+            if (keep.contains(edgeKey(intArrayOf(a, b)))) return@repeat
+            workA = a
+            workB = b
+            if (reach(true) == m * m && reach(false) == m * m) return true
+        }
+        workA = -1
+        workB = -1
+        return false
+    }
+
+    private fun edgeKey(e: IntArray): Long = minOf(e[0], e[1]).toLong() * 100000L + maxOf(e[0], e[1])
+
+    // The closed road piece, either way
+    fun isWork(a: Int, b: Int): Boolean = workA >= 0 && ((a == workA && b == workB) || (a == workB && b == workA))
+
+    // A road piece you can drive now: right way on a one-way street, and not closed for road work
+    fun open(a: Int, b: Int): Boolean = canGo(a, b) && !isWork(a, b)
+
+    // The street crosses the train tracks, which run through the middle of block row trainRow
+    fun isTrain(a: Int, b: Int): Boolean = trainRow >= 0 && a % m == b % m && minOf(a / m, b / m) == trainRow
+
+    // One of the four streets around the school block
+    fun isSchool(a: Int, b: Int): Boolean {
+        if (schoolBlock < 0) return false
+        val bc = schoolBlock % n
+        val br = schoolBlock / n
+        val i1 = a % m
+        val j1 = a / m
+        val i2 = b % m
+        val j2 = b / m
+        return if (j1 == j2) minOf(i1, i2) == bc && (j1 == br || j1 == br + 1)
+        else minOf(j1, j2) == br && (i1 == bc || i1 == bc + 1)
+    }
+
+    // On the main road row or column during rush hour
+    fun isRush(a: Int, b: Int): Boolean {
+        if (rushRow < 0) return false
+        return if (a / m == b / m) a / m == rushRow else a % m == rushCol
+    }
+
+    // Time multiplier and crash multiplier from the road events
+    private fun evTime(a: Int, b: Int): Double =
+        (if (storm) 1.1 else 1.0) * (if (isSchool(a, b)) 1.5 else 1.0) * (if (isRush(a, b)) 1.4 else 1.0)
+
+    private fun evRisk(a: Int, b: Int): Double =
+        if (isSchool(a, b)) 0.0 else (if (storm) 1.3 else 1.0) * (if (isRush(a, b)) 1.5 else 1.0)
 
     // Blocks that share a side with block i
     private fun nbrBlocks(i: Int): IntArray {
@@ -233,6 +347,9 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             tries++
             val gap = if (tries < 500) 2 else if (tries < 1000) 1 else 0
             if (key(s) == key(station) || hospKey.containsKey(key(s)) || key(s) == key(call)) continue
+            // Not on the block closed for road work
+            val sg = segNodes(s)
+            if (isWork(sg[0], sg[1])) continue
             if (others.all { blockGap(it, s) >= gap }) {
                 call = s
                 return
@@ -291,7 +408,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         while (stack.isNotEmpty()) {
             val u = stack.removeAt(stack.size - 1)
             for (v in nbr(u)) {
-                val ok = if (forward) canGo(u, v) else canGo(v, u)
+                val ok = if (forward) open(u, v) else open(v, u)
                 if (ok && !seen[v]) {
                     seen[v] = true
                     count++
@@ -349,7 +466,9 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
         val v = list.filterNotNull()
         var traffic = if (v.isEmpty()) 0.0 else v.average()
         if (traffic > 0.5 && !std) traffic = maxOf(0.0, traffic - heavy)
-        return 30.0 * maxOf(0.2, ratingTbl[q] + traffic + (if (std) targetDrv else drv))
+        // The train gates add a wait of 6 seconds on every street that crosses the tracks
+        return 30.0 * maxOf(0.2, ratingTbl[q] + traffic + (if (std) targetDrv else drv)) * evTime(a, b) +
+            (if (isTrain(a, b)) 6.0 else 0.0)
     }
 
     private fun blockRisk(tbl: Array<DoubleArray>, bc: Int, br: Int): Double? {
@@ -396,7 +515,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
 
     // Accident chance for one road piece before skills. The base shrinks as cities grow,
     // so a normal run (both legs) adds up to about 5% in any city.
-    fun segCrash(a: Int, b: Int): Double = 0.02 / m * segMult(a, b)
+    fun segCrash(a: Int, b: Int): Double = 0.02 / m * segMult(a, b) * evRisk(a, b)
 
     fun accidentChance(x: Double, z: Double, s: Double, l: Double): Double {
         val c = 0.07 * (1.0 + x + distraction - (z + s + l))
@@ -458,7 +577,7 @@ class CityData(val level: Int, val idx: Int, seed: Long) {
             if (u == -1) return@repeat
             seen[u] = true
             for (v in nbr(u)) {
-                if (canGo(u, v) && !blocked[v]) {
+                if (open(u, v) && !blocked[v]) {
                     val c = dist[u] + segTime(u, v, std) + (if (isGoal[v]) 0.0 else nodeTime(v, std))
                     if (c < dist[v]) {
                         dist[v] = c

@@ -606,8 +606,86 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             )
         }
     }
+    drawEvents(c)
     // Wet night sheen over the whole city
     box(Color(0xFF3B6EA5), 0f, 0f, c.w, c.h, 0f, 0.12f)
+}
+
+// Road events on the map: rush hour roads in red, the school zone in yellow, the train tracks,
+// cones on the closed block, and rain for a storm
+private fun DrawScope.drawEvents(c: CityData) {
+    val n = c.n
+    val m = c.m
+    if (c.rushRow >= 0) {
+        box(Color(0xFFE53935), 0f, c.nodeY(c.rushRow) - 8f, c.w, 16f, 0f, 0.35f)
+        box(Color(0xFFE53935), c.nodeX(c.rushCol) - 8f, 12f, 16f, c.h - 24f, 0f, 0.35f)
+    }
+    if (c.schoolBlock >= 0) {
+        val bc = c.schoolBlock % n
+        val br = c.schoolBlock / n
+        val x0 = c.nodeX(bc)
+        val y0 = c.nodeY(br)
+        val yellow = Color(0xFFFFD23A)
+        box(yellow, x0 - 8f, y0 - 8f, 96f, 16f, 0f, 0.35f)
+        box(yellow, x0 - 8f, y0 + 72f, 96f, 16f, 0f, 0.35f)
+        box(yellow, x0 - 8f, y0 - 8f, 16f, 96f, 0f, 0.35f)
+        box(yellow, x0 + 72f, y0 - 8f, 16f, 96f, 0f, 0.35f)
+        // School sign in the middle of the block
+        drawRoundRect(yellow, Offset(x0 + 28f, y0 + 30f), Size(24f, 20f), CornerRadius(3f))
+        drawRoundRect(Color(0xFF3A2E00), Offset(x0 + 28f, y0 + 30f), Size(24f, 20f), CornerRadius(3f), style = Stroke(1.5f))
+        drawCircle(Color(0xFF3A2E00), 2.5f, Offset(x0 + 36f, y0 + 36f))
+        drawCircle(Color(0xFF3A2E00), 2.5f, Offset(x0 + 44f, y0 + 36f))
+        box(Color(0xFF3A2E00), x0 + 34f, y0 + 40f, 4f, 7f)
+        box(Color(0xFF3A2E00), x0 + 42f, y0 + 40f, 4f, 7f)
+    }
+    if (c.trainRow >= 0) {
+        val y = c.nodeY(c.trainRow) + 40f
+        val tie = Color(0xFF5A4636)
+        var x = 2f
+        while (x < c.w) {
+            box(tie, x, y - 6f, 3f, 12f)
+            x += 7f
+        }
+        drawLine(Color(0xFFA9A39A), Offset(0f, y - 3.5f), Offset(c.w, y - 3.5f), 1.6f)
+        drawLine(Color(0xFFA9A39A), Offset(0f, y + 3.5f), Offset(c.w, y + 3.5f), 1.6f)
+        // Red and white gates where each street crosses
+        for (i in 0..n) {
+            val gx = c.nodeX(i)
+            for (k in 0..3) box(if (k % 2 == 0) Color(0xFFE53935) else Color.White, gx - 8f + k * 4f, y - 11f, 4f, 2.5f)
+            for (k in 0..3) box(if (k % 2 == 0) Color(0xFFE53935) else Color.White, gx - 8f + k * 4f, y + 8.5f, 4f, 2.5f)
+        }
+    }
+    if (c.workA >= 0) {
+        val ax = c.nodeX(c.workA % m)
+        val ay = c.nodeY(c.workA / m)
+        val bx = c.nodeX(c.workB % m)
+        val by = c.nodeY(c.workB / m)
+        val orange = Color(0xFFFF8A1C)
+        drawLine(orange, Offset(ax, ay), Offset(bx, by), 14f, alpha = 0.45f)
+        // Cones and a barrier in the middle of the block
+        val mx = (ax + bx) / 2f
+        val my = (ay + by) / 2f
+        val horiz = ay == by
+        for (k in -2..2) {
+            val cx = if (horiz) mx + k * 12f else mx
+            val cy = if (horiz) my else my + k * 12f
+            poly(orange, 1f, cx - 3.5f, cy + 3f, cx + 3.5f, cy + 3f, cx, cy - 5f)
+            box(Color.White, cx - 2f, cy - 1f, 4f, 1.4f)
+        }
+        if (horiz) for (k in 0..4) box(if (k % 2 == 0) orange else Color.White, mx - 10f + k * 4f, my - 9f, 4f, 3f)
+        else for (k in 0..4) box(if (k % 2 == 0) orange else Color.White, mx + 6f, my - 10f + k * 4f, 3f, 4f)
+    }
+    if (c.events.contains(EV_STORM)) {
+        box(Color(0xFF1A2A48), 0f, 0f, c.w, c.h, 0f, 0.25f)
+        val rain = Color(0xFF9FC4FF)
+        var k = 0
+        while (k < (c.w * c.h / 900f).toInt()) {
+            val x = ((k * 53) % c.w.toInt()).toFloat()
+            val y = ((k * 97) % c.h.toInt()).toFloat()
+            drawLine(rain, Offset(x, y), Offset(x - 3f, y + 10f), 1f, alpha = 0.35f)
+            k++
+        }
+    }
 }
 
 private fun DrawScope.glow(cx: Float, cy: Float, p: Float, k: Float) {
@@ -779,7 +857,7 @@ private fun traceTo(rs: RouteState, mp: Offset): Pair<Offset, Offset>? {
             rs.move(nn)
             continue
         }
-        if (!c.canGo(ln, nn) || rs.path.contains(nn)) return null
+        if (!c.open(ln, nn) || rs.path.contains(nn)) return null
         if (abs(along) < 40f) return lp to (lp + (pt(nn) - lp) * (abs(along) / 80f))
         val before = rs.path.size
         rs.move(nn)

@@ -21,6 +21,9 @@ fun rating(user: Double, fast: Double): Int {
 // Pedestrian and car accidents. Each road piece gets one small roll set by its traffic.
 // Set to false to turn them off.
 const val ACCIDENTS_ON = true
+// Crash calls with more than one patient: from this level, this percent of calls
+const val CRASH_LEVEL = 5
+const val CRASH_CHANCE = 15
 
 // Grades: 0 A, 1 B, 2 C, 3 F, -1 N/A
 val gradeNames = listOf("A", "B", "C", "F")
@@ -77,11 +80,17 @@ class RouteState(val player: PlayerData) {
     // True once the player has seen how the treatment in the back went
     var worseAck by mutableStateOf(false)
     val worseWas = IntArray(5)
+    var worseLeft by mutableIntStateOf(BACK_SECONDS)
     // True after a good drive to the hospital, until the handoff report is given
     var handoff by mutableStateOf(false)
     var gHand by mutableIntStateOf(-1)
     var nHand by mutableStateOf("")
     var handBonus by mutableIntStateOf(0)
+    // Crash calls: everyone hurt in the crash (empty on a normal call), and the triage grade
+    var victims by mutableStateOf<List<Patient>>(emptyList())
+    var triaged by mutableStateOf(false)
+    var gTri by mutableIntStateOf(-1)
+    var nTri by mutableStateOf("")
     private var awarded = false
     // True once a leg was driven with the Siren boost. The boost is used up when the next run starts.
     private var boostUsed = false
@@ -230,6 +239,11 @@ class RouteState(val player: PlayerData) {
             player.save()
         }
         patient = Patient(level, Random(patientSeed))
+        victims = makeVictims()
+        if (victims.isNotEmpty()) patient = victims[0]
+        triaged = false
+        gTri = -1
+        nTri = ""
         stage = 0
         path.clear()
         fastPath.clear()
@@ -258,10 +272,38 @@ class RouteState(val player: PlayerData) {
         worseDone = false
         worseOk = false
         worseAck = false
+        worseLeft = BACK_SECONDS
         handoff = false
         gHand = -1
         nHand = ""
         handBonus = 0
+    }
+
+    // From Level 5, some calls are car crashes with 2 or 3 people hurt. Built from the patient seed,
+    // so a retry with Hearts brings back the same people.
+    private fun makeVictims(): List<Patient> {
+        if (level < CRASH_LEVEL) return emptyList()
+        val r = Random(patientSeed xor 0xC4A5)
+        if (r.nextInt(100) >= CRASH_CHANCE) return emptyList()
+        val sev = (if (r.nextBoolean()) listOf(2, 1, 0) else listOf(2, 1)).shuffled(r)
+        val first = Patient(level, Random(r.nextLong()), sev[0])
+        return listOf(first) + sev.drop(1).map { Patient(level, Random(r.nextLong()), it, first.address) }
+    }
+
+    fun needsTriage(): Boolean = victims.size > 1 && !triaged
+
+    // Take patient i. The sickest is an A, the next a B, the one who could walk a C. It never fails the run.
+    fun pickVictim(i: Int) {
+        if (triaged) return
+        triaged = true
+        patient = victims[i]
+        gTri = 2 - victims[i].severity
+        nTri = when (gTri) {
+            0 -> "took the sickest first"
+            1 -> "someone else was sicker"
+            else -> "took the one who could walk"
+        }
+        version++
     }
 
     fun passed(): Boolean = gTo != 3 && gExam != 3 && gHosp != 3
@@ -394,7 +436,7 @@ class RouteState(val player: PlayerData) {
         player.credits += c
         player.totalXp += c
         var h = (player.rank - lvBefore) * HEARTS_PER_LEVEL
-        if (gTo == 0 && gExam == 0 && gHosp == 0 && gHand <= 0) h += HEARTS_STRAIGHT_A
+        if (gTo == 0 && gExam == 0 && gHosp == 0 && gHand <= 0 && gTri <= 0) h += HEARTS_STRAIGHT_A
         heartsEarned = h
         player.hearts += h
         if (passed() && player.goodRuns < RUNS_PER_CITY) {
@@ -542,7 +584,7 @@ class RouteState(val player: PlayerData) {
             path.removeAt(path.size - 1)
             return
         }
-        if (city.canGo(last, n) && !path.contains(n)) {
+        if (city.open(last, n) && !path.contains(n)) {
             path.add(n)
             arrive(n)
         }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -352,6 +354,8 @@ fun mapTip(rs: RouteState, p: PlayerData, guide: GuideState): String {
         if (rs.level < MAX_LEVEL && p.seen("intro") && !p.seen("start" + rs.level)) return "start" + rs.level
         if (rs.kitNeeded() && !p.seen("dr")) return "dr"
         if ((rs.idx > 0 || rs.level > 1) && !p.seen("city") && p.seen("intro")) return "city"
+        // Each kind of road event is explained once, the first time it shows up
+        if (p.seen("intro")) for (e in rs.city.events) if (!p.seen("ev$e")) return "ev$e"
     }
     if (rs.stage == 1 && !rs.done && rs.path.isEmpty() && !p.seen("hosp")) return "hosp"
     if (ACCIDENTS_ON && rs.stage == 0 && rs.done && !rs.checking && rs.accSeg < 0 && rs.driveShown && !p.seen("risk")) return "risk"
@@ -361,6 +365,11 @@ fun mapTip(rs: RouteState, p: PlayerData, guide: GuideState): String {
 
 @Composable
 fun DotTip(key: String, rs: RouteState, onDone: () -> Unit) {
+    if (key.startsWith("ev")) {
+        val e = key.drop(2).toIntOrNull() ?: 0
+        GuideCard(false, eventGlyphs[e] + " " + eventNames[e] + " in this city!", eventTips[e], "Got it", onButton = onDone)
+        return
+    }
     when (key) {
         "dr" -> GuideCard(
             false, "City 5 cleared! Nice job.",
@@ -460,6 +469,7 @@ private fun NeedRow(glyph: String, name: String, note: String, cost: Int, owned:
 }
 
 // The call card at the start of every run. On your very first run it starts with the game loop.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, onRespond: () -> Unit) {
     val first = !p.seen("intro")
@@ -492,7 +502,9 @@ fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, o
     }
     val pt = rs.patient
     val who = (if (pt.female) "Woman, " else "Man, ") + pt.age
-    var body = (if (first) "First call: " else "Respond to ") + "**" + pt.address + "**. " + who + ", **" +
+    val crash = rs.victims.size
+    var body = if (crash > 1) "Respond to **" + pt.address + "**. Two cars crashed and **" + crash + " people** are hurt. Unit 2 is on the way to help."
+        else (if (first) "First call: " else "Respond to ") + "**" + pt.address + "**. " + who + ", **" +
         pt.title.lowercase() + "**."
     if (first) body += " Drag a route from your station to the glowing house. Pinch to zoom, two fingers to move."
     GuideCard(
@@ -502,10 +514,13 @@ fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, o
         extra = {
             if (!first) {
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     RedChip(pt.title)
-                    Chip("Run " + minOf(p.goodRuns + 1, RUNS_PER_CITY) + " of " + RUNS_PER_CITY)
+                    if (crash > 1) Chip("" + crash + " patients")
+                    // After 5 good runs the city is cleared, so there's no "Run 6 of 5"
+                    Chip(if (p.goodRuns >= RUNS_PER_CITY) "City cleared" else "Run " + (p.goodRuns + 1) + " of " + RUNS_PER_CITY)
                     Chip("Target " + fmt(target))
+                    for (e in rs.city.events) Chip(eventGlyphs[e] + " " + eventNames[e])
                 }
             } else {
                 Text("2 of 2", color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.End))
@@ -528,12 +543,18 @@ fun examTip(level: Int, p: PlayerData): String {
 
 private fun skillTip(level: Int): Pair<String, String> = when (level) {
     2 -> "New skill: Vitals!" to "Tap **Vitals** on every patient who is awake. It checks blood pressure and pulse. Numbers in red mean trouble."
-    3 -> "New skill: Oxygen!" to "Trouble breathing? Run **Pulse ox**. Under 93% is low and under 90% is dangerous, so give **Oxygen** before you leave."
-    4 -> "New skill: Glucose!" to "Weak or shaky? Run the **Glucose** test. Low sugar, give **Glucose**. High sugar needs the hospital, not glucose."
-    5 -> "New skill: Trauma exam!" to "Hurt? Run the **Trauma** exam. Bleeding or a broken bone needs **Splint / Stop bleeding** before you go. A sore bump on the head doesn't."
-    6 -> "New skill: CPR!" to "Not breathing and no pulse? Start **CPR** right away. It doesn't always work, but without it they have no chance."
-    7 -> "New skill: Stroke test!" to "Dizzy or feeling strange? Run the **Stroke** test and **Glucose**. A stroke needs a bigger hospital."
-    else -> "New skill: ECG and Shock!" to "Chest pain? Run the **ECG**. If the pulse is under 80 or over 120, a **Shock** brings it back to normal."
+    3 -> "New skill: Oxygen!" to "Trouble breathing? Run **Pulse ox**. Under 93% is low and under 90% is dangerous, so give **Oxygen** before you leave. " +
+        "Wheezing from **asthma**? Give the **Inhaler** too."
+    4 -> "New skill: Glucose!" to "Weak or shaky? Run the **Glucose** test. Low sugar, give **Glucose**. High sugar needs the hospital, not glucose. " +
+        "Swelling or a tight throat from an **allergy**? Give the **EpiPen**."
+    5 -> "New skill: Trauma exam!" to "Hurt? Run the **Trauma** exam. Bleeding or a broken bone needs **Splint / Stop bleeding** before you go. A sore bump on the head doesn't. " +
+        "A **burn** needs a **Burn dressing**. Car crashes can have more than one patient: take the sickest."
+    6 -> "New skill: CPR!" to "Not breathing and no pulse? Start **CPR** right away. It doesn't always work, but without it they have no chance. " +
+        "Hard to wake after too much medicine? Give **Narcan**. Hot and confused? **Cooling**."
+    7 -> "New skill: Stroke test!" to "Dizzy or feeling strange? Run the **Stroke** test and **Glucose**. A stroke needs a bigger hospital. " +
+        "After a **seizure**, give **Seizure care** and check **Glucose**."
+    else -> "New skill: ECG and Shock!" to "Chest pain? Run the **ECG**. If the pulse is under 80 or over 120, a **Shock** brings it back to normal. " +
+        "Very cold and shivering? **Warm blankets**."
 }
 
 @Composable

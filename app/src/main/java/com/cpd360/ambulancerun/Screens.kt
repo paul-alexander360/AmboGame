@@ -36,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -305,6 +306,8 @@ private fun Page(title: String, player: PlayerData, onBack: () -> Unit, content:
 
 @Composable
 fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
+    // The name, organization and unit are saved once, when you leave this page, not on every key
+    DisposableEffect(Unit) { onDispose { player.save() } }
     Page("Character", player, onBack) {
         // Big painted portrait that updates as you pick
         Box(
@@ -337,7 +340,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
             LabeledRow("Name") {
                 BasicTextField(
                     value = player.name,
-                    onValueChange = { player.name = it.take(16); player.save() },
+                    onValueChange = { player.name = it.take(16) },
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
                     cursorBrush = SolidColor(Gold),
@@ -351,7 +354,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
             LabeledRow("Organization") {
                 BasicTextField(
                     value = player.org,
-                    onValueChange = { player.org = it.take(24); player.save() },
+                    onValueChange = { player.org = it.take(24) },
                     singleLine = true,
                     textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),
                     cursorBrush = SolidColor(Gold),
@@ -365,7 +368,7 @@ fun CharacterScreen(player: PlayerData, onBack: () -> Unit) {
             LabeledRow("Unit number") {
                 BasicTextField(
                     value = player.unit,
-                    onValueChange = { t -> player.unit = t.filter { it.isDigit() }.take(4); player.save() },
+                    onValueChange = { t -> player.unit = t.filter { it.isDigit() }.take(4) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     textStyle = TextStyle(fontSize = 16.sp, color = InkText, fontWeight = FontWeight.Bold),

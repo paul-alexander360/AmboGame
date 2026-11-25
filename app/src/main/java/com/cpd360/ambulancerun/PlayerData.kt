@@ -54,8 +54,9 @@ fun itemCost(d: DrItem): Int {
     return if (itemsFor(lv).size < 2) 500 * lv else if (d.treat) 200 * lv else 300 * lv
 }
 
-// A treatment opens once you own the test from the same level, if there is one
-fun itemNeeds(d: DrItem): DrItem? = if (d.treat) itemsFor(itemLevel(d)).firstOrNull { !it.treat } else null
+// A treatment opens once you own the test from the same level, if there is one.
+// The new patients' treatments (5 and up) need no test.
+fun itemNeeds(d: DrItem): DrItem? = if (d.treat && d.k < 5) itemsFor(itemLevel(d)).firstOrNull { !it.treat } else null
 
 val shopTestNames = listOf("Vitals", "Pulse ox test", "Glucose test", "Stroke test", "ECG", "Trauma exam")
 val shopTestDescs = listOf(
@@ -63,12 +64,15 @@ val shopTestDescs = listOf(
     "Checks for signs of a stroke", "Reads the heart rhythm", "Checks for bleeding and broken bones"
 )
 val shopTestGlyphs = listOf("💓", "🫁", "🩸", "🧠", "📈", "🦴")
-val shopTreatNames = listOf("Oxygen", "Glucose", "Splint / Stop bleeding", "CPR", "Shock")
+val shopTreatNames = treatNames
 val shopTreatDescs = listOf(
     "Give oxygen when it's low", "Give sugar when it's low", "Stop bleeding and splint broken bones",
-    "Start CPR when the heart stops", "Shock a heart that's too fast or too slow"
+    "Start CPR when the heart stops", "Shock a heart that's too fast or too slow",
+    "Opens the airways in an asthma attack", "Stops a bad allergic reaction", "Cools and covers a burn",
+    "Wakes up someone who took too much medicine", "Cools down someone who is too hot",
+    "Keeps someone safe after a seizure", "Warms up someone who is too cold"
 )
-val shopTreatGlyphs = listOf("💨", "🍬", "🩹", "❤️", "⚡")
+val shopTreatGlyphs = listOf("💨", "🍬", "🩹", "❤️", "⚡", "🌬️", "💉", "🧊", "👃", "❄️", "🛡️", "🧣")
 
 fun itemName(d: DrItem): String = if (d.treat) shopTreatNames[d.k] else shopTestNames[d.k]
 fun itemDesc(d: DrItem): String = if (d.treat) shopTreatDescs[d.k] else shopTestDescs[d.k]
@@ -124,7 +128,7 @@ class PlayerData(private val ctx: Context) {
 
     // Tests and treatments bought from Dr. Ray. Indexes match testNames and treatNames.
     val testsOwned = mutableStateListOf(false, false, false, false, false, false)
-    val treatsOwned = mutableStateListOf(false, false, false, false, false)
+    val treatsOwned = mutableStateListOf(*Array(treatNames.size) { false })
 
     // Certification moves up with skills: Unit until Vitals, Aid until the Stroke test, then Medic
     val cert: String
@@ -151,11 +155,6 @@ class PlayerData(private val ctx: Context) {
     val charUp = mutableStateListOf(0, 0, 0)
     val ambUp = mutableStateListOf(0, 0, 0, 0, 0, 0, 0)
 
-    val pedBonus: Int get() = charUp[SKILL_PED]
-    val mvcBonus: Int get() = charUp[SKILL_CRASH]
-    val ambAvoid: Double
-        get() = 0.005 * ambUp[TIRES] + 0.01 * (ambUp[BRAKES] + ambUp[LIGHTS] + ambUp[SIREN] + ambUp[CAB])
-
     // Rank goes up every 500 XP. Level always means the city level.
     val rank: Int get() = 1 + totalXp / 500
     val drive: Double
@@ -166,8 +165,6 @@ class PlayerData(private val ctx: Context) {
     fun speedVsTarget(lvl: Int): Double = (1.5 + drive) / (1.5 + Levels.driver[lvl - 1]) - 1.0
 
     val crossK: Double get() = 1.0 - 0.06 * (ambUp[LIGHTS] + ambUp[SIREN])
-    val avoidance: Double get() = 0.01 * (rank - 1)
-    val dodge: Double get() = minOf(0.9, 0.05 + 0.01 * (rank - 1))
     val heavyBonus: Double get() = 0.1 * heavy
 
     // Crash risk multiplier from skills and upgrades. Never below 30% of the base.
