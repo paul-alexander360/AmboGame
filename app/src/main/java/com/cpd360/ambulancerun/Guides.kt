@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -224,7 +225,8 @@ fun DrawScope.doctorIcon() {
 @Composable
 fun GuideScene(dr: Boolean, bubble: String, modifier: Modifier) {
     val look = remember(dr) { if (dr) rayLook() else dotLook() }
-    Box(modifier) {
+    // Clip so the painted person stays inside the picture and never covers the text below
+    Box(modifier.clipToBounds()) {
         Canvas(Modifier.fillMaxSize()) { bustFramed(look, if (dr) BG_OFFICE else BG_DISPATCH, FRAME_SHEET) }
         if (bubble != "") {
             Box(
