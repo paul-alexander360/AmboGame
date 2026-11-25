@@ -290,7 +290,7 @@ fun GuideCard(
                 .background(Color(0xEB141820))
                 .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(28.dp))
         ) {
-            GuideScene(dr, bubble, Modifier.fillMaxWidth().height(190.dp))
+            GuideScene(dr, bubble, Modifier.fillMaxWidth().height(290.dp))
             Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(

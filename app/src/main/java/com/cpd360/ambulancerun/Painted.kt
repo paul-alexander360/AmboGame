@@ -554,9 +554,9 @@ fun DrawScope.bustFramed(o: Look, bg: Int, frame: Int) {
     drawRect(Brush.verticalGradient(bgc))
     when (frame) {
         FRAME_SHEET -> {
-            // Head and shoulders across a wide, short strip, sized like the approved mockup:
-            // the whole head from the hair bun to the headset mic fits, with the shoulders below.
-            val sc = minOf(w * 0.93f / BW, h / 150f)
+            // Head and shoulders, sized like the approved mockup (dot-card-taller-v1):
+            // the whole head from the hair bun down, with the shoulders and uniform below.
+            val sc = minOf(w * 0.93f / BW, h / 242f)
             translate(w / 2f - 132f * sc, -8f * sc) { scale(sc, Offset.Zero) { bust(o, bg, true) } }
             // One vignette over the whole strip, so there are no seams at the sides
             drawRect(
