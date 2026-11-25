@@ -106,6 +106,11 @@ fun GradeCard(rs: RouteState, onNext: () -> Unit, onKit: () -> Unit, onShop: () 
                 Spacer(Modifier.height(8.dp))
                 GradeRow("Drive to call", rs.nTo, rs.gTo)
                 Line()
+                // Only on crash calls with more than one patient
+                if (rs.gTri >= 0) {
+                    GradeRow("Triage", rs.nTri, rs.gTri)
+                    Line()
+                }
                 GradeRow("Patient exam", rs.nExam, rs.gExam)
                 Line()
                 GradeRow("Drive to hospital", rs.nHosp, rs.gHosp)

@@ -299,6 +299,25 @@ private fun zoneGround(z: Int, d: Int): Color {
 private fun DrawScope.box(c: Color, x: Float, y: Float, w: Float, h: Float, r: Float = 0f, a: Float = 1f) =
     drawRoundRect(c, Offset(x, y), Size(w, h), CornerRadius(r, r), alpha = a)
 
+// Bright concrete driveway from the front door to the curb, with a dark edge so it stands out
+// at night, a curb cut where it meets the sidewalk edge, and a warm porch light at the door.
+private val DriveC = Color(0xFFD8D2C2)
+private val DriveCut = Color(0xFFF2ECDC)
+private val DriveEdge = Color(0xFF14161A)
+private val Porch = Color(0xFFFFD27A)
+
+private fun DrawScope.driveway(x: Float, y: Float, w: Float, h: Float, ax: Float, ay: Float, aw: Float, ah: Float, dx: Float, dy: Float) {
+    box(DriveEdge, x - 1f, y - 1f, w + 2f, h + 2f, 1.5f, 0.85f)
+    box(DriveC, x, y, w, h, 1f)
+    box(DriveCut, ax, ay, aw, ah)
+    drawRect(DriveEdge, Offset(ax, ay), Size(aw, ah), style = Stroke(0.6f))
+    drawCircle(
+        Brush.radialGradient(listOf(Porch.copy(alpha = 0.55f), Porch.copy(alpha = 0f)), Offset(dx, dy), 9f),
+        9f, Offset(dx, dy)
+    )
+    drawCircle(Porch, 1.8f, Offset(dx, dy))
+}
+
 private fun DrawScope.poly(c: Color, a: Float, vararg p: Float) {
     val path = Path()
     path.moveTo(p[0], p[1])
@@ -503,9 +522,6 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
     }
     val cellX = floatArrayOf(18f, 46f, 18f, 46f)
     val cellY = floatArrayOf(18f, 18f, 46f, 46f)
-    val dw = Color(0xFF6F6D68)
-    val ap = Color(0xFF9C9A93)
-    val door = Color(0xFF2A2018)
     for (r in 0 until n) for (cc in 0 until n) {
         val bx = 27f + 80f * cc
         val by = 28f + 80f * r
@@ -520,10 +536,10 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             val cy = by + cellY[k]
             if (detail) {
                 when (k) {
-                    0 -> { box(dw, bx - 1f, cy - 3f, (cx - 9f) - (bx - 1f), 6f); box(ap, bx - 3f, cy - 5f, 3f, 10f); drawCircle(door, 1.8f, Offset(cx - 9f, cy)) }
-                    1 -> { box(dw, cx - 3f, by - 1f, 6f, (cy - 9f) - (by - 1f)); box(ap, cx - 5f, by - 3f, 10f, 3f); drawCircle(door, 1.8f, Offset(cx, cy - 9f)) }
-                    2 -> { box(dw, cx - 3f, cy + 9f, 6f, (by + 65f) - (cy + 9f)); box(ap, cx - 5f, by + 64f, 10f, 3f); drawCircle(door, 1.8f, Offset(cx, cy + 9f)) }
-                    else -> { box(dw, cx + 9f, cy - 3f, (bx + 65f) - (cx + 9f), 6f); box(ap, bx + 64f, cy - 5f, 3f, 10f); drawCircle(door, 1.8f, Offset(cx + 9f, cy)) }
+                    0 -> driveway(bx + 2f, cy - 4f, (cx - 9f) - (bx + 2f), 8f, bx + 2f, cy - 6f, 2f, 12f, cx - 9f, cy)
+                    1 -> driveway(cx - 4f, by + 2f, 8f, (cy - 9f) - (by + 2f), cx - 6f, by + 2f, 12f, 2f, cx, cy - 9f)
+                    2 -> driveway(cx - 4f, cy + 9f, 8f, (by + 62f) - (cy + 9f), cx - 6f, by + 60f, 12f, 2f, cx, cy + 9f)
+                    else -> driveway(cx + 9f, cy - 4f, (bx + 62f) - (cx + 9f), 8f, bx + 60f, cy - 6f, 2f, 12f, cx + 9f, cy)
                 }
             }
             val key = (r * n + cc) * 4 + k
@@ -606,8 +622,97 @@ private fun DrawScope.drawStatic(c: CityData, sc: Float) {
             )
         }
     }
+    drawEvents(c)
     // Wet night sheen over the whole city
     box(Color(0xFF3B6EA5), 0f, 0f, c.w, c.h, 0f, 0.12f)
+}
+
+// Road events on the map: rush hour roads in red, the school zone in yellow, the train tracks,
+// cones on the closed block, rain for a storm and snow for snow
+private fun DrawScope.drawEvents(c: CityData) {
+    val n = c.n
+    val m = c.m
+    if (c.rushRow >= 0) {
+        box(Color(0xFFE53935), 0f, c.nodeY(c.rushRow) - 8f, c.w, 16f, 0f, 0.35f)
+        box(Color(0xFFE53935), c.nodeX(c.rushCol) - 8f, 12f, 16f, c.h - 24f, 0f, 0.35f)
+    }
+    if (c.schoolBlock >= 0) {
+        val bc = c.schoolBlock % n
+        val br = c.schoolBlock / n
+        val x0 = c.nodeX(bc)
+        val y0 = c.nodeY(br)
+        val yellow = Color(0xFFFFD23A)
+        box(yellow, x0 - 8f, y0 - 8f, 96f, 16f, 0f, 0.35f)
+        box(yellow, x0 - 8f, y0 + 72f, 96f, 16f, 0f, 0.35f)
+        box(yellow, x0 - 8f, y0 - 8f, 16f, 96f, 0f, 0.35f)
+        box(yellow, x0 + 72f, y0 - 8f, 16f, 96f, 0f, 0.35f)
+        // School sign in the middle of the block
+        drawRoundRect(yellow, Offset(x0 + 28f, y0 + 30f), Size(24f, 20f), CornerRadius(3f))
+        drawRoundRect(Color(0xFF3A2E00), Offset(x0 + 28f, y0 + 30f), Size(24f, 20f), CornerRadius(3f), style = Stroke(1.5f))
+        drawCircle(Color(0xFF3A2E00), 2.5f, Offset(x0 + 36f, y0 + 36f))
+        drawCircle(Color(0xFF3A2E00), 2.5f, Offset(x0 + 44f, y0 + 36f))
+        box(Color(0xFF3A2E00), x0 + 34f, y0 + 40f, 4f, 7f)
+        box(Color(0xFF3A2E00), x0 + 42f, y0 + 40f, 4f, 7f)
+    }
+    if (c.trainRow >= 0) {
+        val y = c.nodeY(c.trainRow) + 40f
+        val tie = Color(0xFF5A4636)
+        var x = 2f
+        while (x < c.w) {
+            box(tie, x, y - 6f, 3f, 12f)
+            x += 7f
+        }
+        drawLine(Color(0xFFA9A39A), Offset(0f, y - 3.5f), Offset(c.w, y - 3.5f), 1.6f)
+        drawLine(Color(0xFFA9A39A), Offset(0f, y + 3.5f), Offset(c.w, y + 3.5f), 1.6f)
+        // Red and white gates where each street crosses
+        for (i in 0..n) {
+            val gx = c.nodeX(i)
+            for (k in 0..3) box(if (k % 2 == 0) Color(0xFFE53935) else Color.White, gx - 8f + k * 4f, y - 11f, 4f, 2.5f)
+            for (k in 0..3) box(if (k % 2 == 0) Color(0xFFE53935) else Color.White, gx - 8f + k * 4f, y + 8.5f, 4f, 2.5f)
+        }
+    }
+    if (c.workA >= 0) {
+        val ax = c.nodeX(c.workA % m)
+        val ay = c.nodeY(c.workA / m)
+        val bx = c.nodeX(c.workB % m)
+        val by = c.nodeY(c.workB / m)
+        val orange = Color(0xFFFF8A1C)
+        drawLine(orange, Offset(ax, ay), Offset(bx, by), 14f, alpha = 0.45f)
+        // Cones and a barrier in the middle of the block
+        val mx = (ax + bx) / 2f
+        val my = (ay + by) / 2f
+        val horiz = ay == by
+        for (k in -2..2) {
+            val cx = if (horiz) mx + k * 12f else mx
+            val cy = if (horiz) my else my + k * 12f
+            poly(orange, 1f, cx - 3.5f, cy + 3f, cx + 3.5f, cy + 3f, cx, cy - 5f)
+            box(Color.White, cx - 2f, cy - 1f, 4f, 1.4f)
+        }
+        if (horiz) for (k in 0..4) box(if (k % 2 == 0) orange else Color.White, mx - 10f + k * 4f, my - 9f, 4f, 3f)
+        else for (k in 0..4) box(if (k % 2 == 0) orange else Color.White, mx + 6f, my - 10f + k * 4f, 3f, 4f)
+    }
+    if (c.events.contains(EV_STORM)) {
+        box(Color(0xFF1A2A48), 0f, 0f, c.w, c.h, 0f, 0.25f)
+        val rain = Color(0xFF9FC4FF)
+        var k = 0
+        while (k < (c.w * c.h / 900f).toInt()) {
+            val x = ((k * 53) % c.w.toInt()).toFloat()
+            val y = ((k * 97) % c.h.toInt()).toFloat()
+            drawLine(rain, Offset(x, y), Offset(x - 3f, y + 10f), 1f, alpha = 0.35f)
+            k++
+        }
+    }
+    if (c.events.contains(EV_SNOW)) {
+        // a cold white dusting over the city and falling flakes
+        box(Color(0xFFDCE6F5), 0f, 0f, c.w, c.h, 0f, 0.22f)
+        var k = 0
+        while (k < (c.w * c.h / 700f).toInt()) {
+            val x = ((k * 53) % c.w.toInt()).toFloat()
+            val y = ((k * 97) % c.h.toInt()).toFloat()
+            drawCircle(Color.White, 0.8f + (k % 3) * 0.6f, Offset(x, y), alpha = 0.55f)
+            k++
+        }
+    }
 }
 
 private fun DrawScope.glow(cx: Float, cy: Float, p: Float, k: Float) {
@@ -779,7 +884,7 @@ private fun traceTo(rs: RouteState, mp: Offset): Pair<Offset, Offset>? {
             rs.move(nn)
             continue
         }
-        if (!c.canGo(ln, nn) || rs.path.contains(nn)) return null
+        if (!c.open(ln, nn) || rs.path.contains(nn)) return null
         if (abs(along) < 40f) return lp to (lp + (pt(nn) - lp) * (abs(along) / 80f))
         val before = rs.path.size
         rs.move(nn)

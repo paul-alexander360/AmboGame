@@ -137,6 +137,11 @@ fun HomeScreen(version: String, player: PlayerData) {
             // Back does nothing during the exam, so the run isn't lost. Tap To hospital! to leave.
             BackHandler { }
             Box(Modifier.fillMaxSize()) {
+                // On a crash call you first pick who rides with you
+                if (rs.needsTriage()) {
+                    Triage(rs)
+                    return
+                }
                 ExamScreen(rs.patient, rs.level, player) {
                     rs.examDone()
                     screen = 0
@@ -180,7 +185,12 @@ fun HomeScreen(version: String, player: PlayerData) {
                 chat = if (rs.stage == 1 && rs.accSeg < 0) rs.chat else emptyList(),
                 patient = rs.patient,
                 worse = rs.stage == 1 && rs.handoff && rs.worse >= 0 && !rs.worseAck,
-                back = { close -> BackCare(rs, true, onDone = close) }
+                back = { close -> BackCare(rs, true, onDone = close) },
+                drone = player.droneView,
+                onView = {
+                    player.droneView = it
+                    player.save()
+                }
             ) {
                 rs.driveShown = true
                 screen = 0
@@ -221,6 +231,8 @@ fun HomeScreen(version: String, player: PlayerData) {
         hint = false
     }
     BackHandler(enabled = menu) { menu = false }
+    // Back does nothing during the handoff report or treating in the back, so the run isn't lost
+    BackHandler(enabled = rs.handoff && !menu) { }
     Box(
         modifier = Modifier
             .fillMaxSize()

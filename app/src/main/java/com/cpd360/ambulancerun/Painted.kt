@@ -824,15 +824,11 @@ fun DrawScope.ambulanceBack(pl: PatientLook, expr: Int, sick: Boolean) {
         o.brow, o.must, o.beard, o.age, o.pale || sick, o.flush, sick, o.bandage, o.lip
     )
     translate(vx - 132f * sc, h * 0.06f) { scale(sc, Offset.Zero) { bust(pt, BG_NONE, true) } }
-    // Stretcher: blanket, chest straps, buckle and the yellow frame
+    // Stretcher: blanket and the yellow frame
     soft(Color.Black, 0.35f, vx, h * 0.97f, w * 0.3f, h * 0.04f, 4f)
     drawPath(pth {
         m(vx - w * 0.24f, h * 0.9f); q(vx, h * 0.86f, vx + w * 0.24f, h * 0.9f); l(vx + w * 0.3f, h); l(vx - w * 0.3f, h); z()
     }, Brush.verticalGradient(listOf(Color.White, Color(0xFFCFD6DE)), h * 0.86f, h))
-    val strap = Color(0xFF1E2026)
-    line(pth { m(vx - w * 0.13f, h * 0.66f); l(vx - w * 0.09f, h * 0.9f); m(vx + w * 0.13f, h * 0.66f); l(vx + w * 0.09f, h * 0.9f) }, strap, w * 0.022f, 0.85f)
-    line(pth { m(vx - w * 0.3f, h * 0.8f); q(vx, h * 0.76f, vx + w * 0.3f, h * 0.8f) }, strap, h * 0.025f)
-    drawRoundRect(Color(0xFF9AA3AD), Offset(vx - w * 0.035f, h * 0.765f), Size(w * 0.07f, h * 0.04f), CornerRadius(3f))
     drawRoundRect(Color(0xFFF2C21A), Offset(vx - w * 0.31f, h * 0.95f), Size(w * 0.62f, h * 0.05f), CornerRadius(5f))
     if (sick) drawRect(Color(0xFFFF2020), Offset.Zero, Size(w, h), alpha = 0.08f)
 }
