@@ -66,9 +66,9 @@ const val HEARTS_TEST_STORE = true
 
 val HeartRed = Color(0xFFE53935)
 val HeartSoft = Color(0xFFFF8A80)
-private val ShopBg = Color(0xFF2E3260)
-private val ShopTile = Color(0xFF474B82)
-private val ShopGo = Color(0xFF6FAE3E)
+private val ShopBg = Color(0xFF13161D)
+private val ShopTile = Color(0xFF232833)
+private val ShopGo = Color(0xFF2FBF5F)
 private val ShopBest = Color(0xFFFFD54A)
 
 // Ads watched today. Resets when the date changes.
