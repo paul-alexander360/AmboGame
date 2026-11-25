@@ -35,6 +35,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -54,7 +56,7 @@ import androidx.compose.ui.unit.sp
 // each step comes up. Dr. Ray explains the exam and each new test or treatment.
 
 const val DR_NAME = "Dr. Ray"
-private val Hi = Color(0xFFFFD54F)
+private val Hi = Color(0xFFFFD27A)
 private val DotSkinL = Color(0xFFF6C9A0)
 private val DotSkinD = Color(0xFFD9956A)
 private val DrSkinL = Color(0xFFC98E60)
@@ -211,26 +213,29 @@ private fun DrawScope.fitScene(dr: Boolean, shift: Float) {
     }
 }
 
-// Small head icon for the menu
+// Small painted portrait of Dr. Ray for the menu
 fun DrawScope.doctorIcon() {
-    val sc = size.width / 90f
-    scale(sc, Offset.Zero) { translate(-115f, -72f) { doctorScene() } }
+    val c = Path()
+    c.addOval(Rect(Offset.Zero, size))
+    clipPath(c) { bustFramed(rayLook(), BG_OFFICE, FRAME_AVATAR) }
 }
 
+// Dot or Dr. Ray, painted, with what they say as a headline across the bottom of the picture
 @Composable
 fun GuideScene(dr: Boolean, bubble: String, modifier: Modifier) {
-    Box(modifier.clip(RoundedCornerShape(14.dp))) {
-        Canvas(Modifier.fillMaxSize()) { fitScene(dr, if (dr) -62f else 0f) }
-        Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .width(150.dp)
-                .background(Color.White, RoundedCornerShape(14.dp))
-                .border(2.dp, ArtInk, RoundedCornerShape(14.dp))
-                .padding(horizontal = 10.dp, vertical = 7.dp)
-        ) {
-            Text(bubble, color = InkText, fontSize = 13.sp, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
+    val look = remember(dr) { if (dr) rayLook() else dotLook() }
+    Box(modifier) {
+        Canvas(Modifier.fillMaxSize()) { bustFramed(look, if (dr) BG_OFFICE else BG_DISPATCH, FRAME_SHEET) }
+        if (bubble != "") {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B0E14))))
+                    .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 10.dp)
+            ) {
+                Text(bubble, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, lineHeight = 19.sp)
+            }
         }
     }
 }
@@ -270,11 +275,12 @@ fun GuideCard(
                 .fillMaxWidth()
                 .safeDrawingPadding()
                 .padding(10.dp)
-                .background(Glass, RoundedCornerShape(20.dp))
-                .padding(12.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(Color(0xEB141820))
+                .border(1.dp, Color(0x24FFFFFF), RoundedCornerShape(28.dp))
         ) {
-            GuideScene(dr, bubble, Modifier.fillMaxWidth().height(170.dp))
-            Spacer(Modifier.height(10.dp))
+            GuideScene(dr, bubble, Modifier.fillMaxWidth().height(190.dp))
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -284,23 +290,14 @@ fun GuideCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     if (dr) "DR. RAY · MEDICAL" else "DISPATCH · DOT",
-                    color = GlassMute, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
+                    color = GlassMute, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp
                 )
             }
-            Spacer(Modifier.height(4.dp))
-            Text(highlight(body), color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, lineHeight = 23.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(highlight(body), color = InkText, fontSize = 16.sp, fontWeight = FontWeight.Bold, lineHeight = 22.sp)
             extra()
-            Spacer(Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF6FAE3E))
-                    .clickable { onButton() }
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(button, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(14.dp))
+            GreenButton(button, Modifier.fillMaxWidth()) { onButton() }
             }
         }
     }
@@ -310,10 +307,23 @@ fun GuideCard(
 private fun Chip(t: String) {
     Box(
         Modifier
-            .background(GlassLine, RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .background(Color(0x12FFFFFF), RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(10.dp))
+            .padding(horizontal = 9.dp, vertical = 5.dp)
     ) {
-        Text(t, color = GlassMute, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(t, color = Color(0xFFCFD5E2), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun RedChip(t: String) {
+    Box(
+        Modifier
+            .background(Color(0x38E53935), RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0x8CE53935), RoundedCornerShape(10.dp))
+            .padding(horizontal = 9.dp, vertical = 5.dp)
+    ) {
+        Text(t, color = Color(0xFFFF9A96), fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -388,7 +398,8 @@ fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, o
                             Row(
                                 Modifier
                                     .weight(1f)
-                                    .background(GlassLine, RoundedCornerShape(10.dp))
+                                    .background(Color(0x12FFFFFF), RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(10.dp))
                                     .padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
                                 Text("" + (i + 1) + " ", color = Hi, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -415,6 +426,7 @@ fun CallCard(rs: RouteState, p: PlayerData, guide: GuideState, target: Double, o
             if (!first) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RedChip(pt.title)
                     Chip("Run " + minOf(p.goodRuns + 1, RUNS_PER_CITY) + " of " + RUNS_PER_CITY)
                     Chip("Target " + fmt(target))
                 }
